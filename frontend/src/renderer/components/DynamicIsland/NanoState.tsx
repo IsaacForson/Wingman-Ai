@@ -5,7 +5,7 @@
 
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../store/appStore'
-import { Mic, MicOff, Wifi, WifiOff } from 'lucide-react'
+import { Mic, MicOff, WifiOff } from 'lucide-react'
 
 const NanoState = () => {
   const { isConnected, isPaused, setIslandState } = useAppStore()

@@ -3,7 +3,8 @@
  * Manages real-time communication with the Python backend
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+
+import { useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAppStore } from '../store/appStore'
 import { v4 as uuidv4 } from 'uuid'
@@ -20,15 +21,13 @@ export function useWebSocket() {
     setProcessing,
     setIslandState,
     addTranscriptLine,
-    updateTranscriptLine,
     setCurrentAnswer,
     appendToAnswer,
     addToHistory,
     setCurrentQuestion,
     setSessionId,
     incrementQuestions,
-    incrementAnswers,
-    mode
+    incrementAnswers
   } = useAppStore()
 
   const connect = useCallback(() => {
@@ -53,19 +52,19 @@ export function useWebSocket() {
       toast.error('Disconnected from backend')
     })
 
-    socket.on('connect_error', (error) => {
+    socket.on('connect_error', (error: Error) => {
       console.error('Connection error:', error)
       setConnected(false)
     })
 
     // System events
-    socket.on('system_ready', (data) => {
+    socket.on('system_ready', (data: { data?: Record<string, unknown> }) => {
       console.log('System ready:', data)
       setIslandState('nano')
     })
 
-    socket.on('session_started', (data) => {
-      setSessionId(data.data?.session_id)
+    socket.on('session_started', (data: { data?: { session_id?: string } }) => {
+      setSessionId(data.data?.session_id || null)
     })
 
     // Audio events
@@ -80,7 +79,7 @@ export function useWebSocket() {
     })
 
     // Transcript events
-    socket.on('transcript_partial', (data) => {
+    socket.on('transcript_partial', (data: { data?: { text?: string } }) => {
       const lineId = `partial-${Date.now()}`
       addTranscriptLine({
         id: lineId,
@@ -90,7 +89,7 @@ export function useWebSocket() {
       })
     })
 
-    socket.on('transcript_final', (data) => {
+    socket.on('transcript_final', (data: { data?: { text?: string } }) => {
       const text = data.data?.text || ''
       const lineId = uuidv4()
       addTranscriptLine({
@@ -102,7 +101,7 @@ export function useWebSocket() {
     })
 
     // Question events
-    socket.on('question_detected', (data) => {
+    socket.on('question_detected', (data: { data?: { text?: string; source?: 'audio' | 'screen' | 'manual' } }) => {
       const question = data.data?.text || ''
       setCurrentQuestion(question)
       incrementQuestions()
@@ -125,7 +124,7 @@ export function useWebSocket() {
       setIslandState('normal')
     })
 
-    socket.on('answer_chunk', (data) => {
+    socket.on('answer_chunk', (data: { data?: { chunk?: string } }) => {
       const chunk = data.data?.chunk || ''
       appendToAnswer(chunk)
       
@@ -136,7 +135,7 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('answer_complete', (data) => {
+    socket.on('answer_complete', (data: { data?: { answer?: string } }) => {
       setProcessing(false)
       
       const currentAnswer = useAppStore.getState().currentAnswer
@@ -152,27 +151,27 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('answer_error', (data) => {
+    socket.on('answer_error', (data: { data?: { error?: string } }) => {
       setProcessing(false)
       toast.error(data.data?.error || 'Failed to generate answer')
       setIslandState('mini')
     })
 
     // Screen events
-    socket.on('screen_text', (data) => {
+    socket.on('screen_text', (data: { data?: { type?: string } }) => {
       console.log('Screen text detected:', data.data?.type)
     })
 
-    socket.on('screen_code', (data) => {
+    socket.on('screen_code', (data: { data?: { blocks?: unknown[] } }) => {
       console.log('Code detected:', data.data?.blocks?.length, 'blocks')
     })
 
-    socket.on('screen_mcq', (data) => {
+    socket.on('screen_mcq', (data: { data?: { mcq?: unknown } }) => {
       console.log('MCQ detected:', data.data?.mcq)
     })
 
     // Mode change
-    socket.on('mode_changed', (data) => {
+    socket.on('mode_changed', (data: { data?: { new_mode?: string } }) => {
       console.log('Mode changed:', data.data?.new_mode)
     })
 
@@ -180,7 +179,7 @@ export function useWebSocket() {
   }, [
     setConnected, setListening, setProcessing, setIslandState,
     addTranscriptLine, setCurrentAnswer, appendToAnswer,
-    addToHistory, setCurrentQuestion, setSessionId,
+    addToHistory, setCurrentQuestion, setSessionId, 
     incrementQuestions, incrementAnswers
   ])
 

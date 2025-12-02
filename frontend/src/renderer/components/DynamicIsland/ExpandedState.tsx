@@ -3,7 +3,7 @@
  * Full answer display with question context
  */
 
-import { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../store/appStore'
 import { 
@@ -16,7 +16,6 @@ import {
   ThumbsDown,
   RotateCcw
 } from 'lucide-react'
-import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 
@@ -113,7 +112,7 @@ const ExpandedState = () => {
             <ReactMarkdown
               components={{
                 // Custom code block rendering
-                code({ node, className, children, ...props }) {
+                code({ className, children, ...props }) {
                   const match = /language-(\w+)/.exec(className || '')
                   const isInline = !match
                   

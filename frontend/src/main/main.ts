@@ -7,8 +7,13 @@ import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, native
 import path from 'path'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
-if (require('electron-squirrel-startup')) {
-  app.quit()
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+try {
+  if (require('electron-squirrel-startup')) {
+    app.quit()
+  }
+} catch {
+  // electron-squirrel-startup not available
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -210,7 +215,6 @@ function setupIPC(): void {
   ipcMain.handle('resize-window', (_, state: keyof typeof WINDOW_CONFIG) => {
     if (mainWindow && WINDOW_CONFIG[state]) {
       const { width, height } = WINDOW_CONFIG[state]
-      const [currentX] = mainWindow.getPosition()
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize
       
       // Keep centered horizontally
