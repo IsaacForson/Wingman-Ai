@@ -2,50 +2,106 @@
  * Wingman AI - Main App Component
  */
 
-import { useEffect } from "react";
-import { Toaster } from "react-hot-toast";
-import DynamicIsland from "./components/DynamicIsland/DynamicIsland";
-import { useAppStore } from "./store/appStore";
-import { useWebSocket } from "./hooks/useWebSocket";
+import { useEffect } from "react"
+import { Toaster } from "react-hot-toast"
+import DynamicIsland from "./components/DynamicIsland/DynamicIsland"
+import { SettingsPanel } from "./components/Settings"
+import { CommandPalette } from "./components/CommandPalette"
+import { useAppStore, OperatingMode } from "./store/appStore"
+import { useWebSocket } from "./hooks/useWebSocket"
 
 function App() {
-  const { setMode, togglePause, setPaused } = useAppStore();
-  const { connect, disconnect } = useWebSocket();
+  const { 
+    setMode, 
+    togglePause, 
+    setPaused,
+    isSettingsOpen,
+    setSettingsOpen,
+    isCommandPaletteOpen,
+    setCommandPaletteOpen
+  } = useAppStore()
+  const { connect, disconnect } = useWebSocket()
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + Space -> Command Palette
+      if ((e.metaKey || e.ctrlKey) && e.code === 'Space') {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+      }
+      
+      // Cmd/Ctrl + , -> Settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault()
+        setSettingsOpen(true)
+      }
+      
+      // Cmd/Ctrl + Shift + P -> Toggle Pause
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault()
+        togglePause()
+      }
+      
+      // Escape -> Close overlays
+      if (e.key === 'Escape') {
+        if (isCommandPaletteOpen) setCommandPaletteOpen(false)
+        else if (isSettingsOpen) setSettingsOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSettingsOpen, isCommandPaletteOpen, setSettingsOpen, setCommandPaletteOpen, togglePause])
 
   useEffect(() => {
     // Connect to backend
-    connect();
+    connect()
 
     // Setup IPC listeners from Electron
     if (window.wingman) {
       const unsubMode = window.wingman.onSetMode((mode) => {
-        setMode(mode as any);
-      });
+        setMode(mode as OperatingMode)
+      })
 
       const unsubPause = window.wingman.onTogglePause(() => {
-        togglePause();
-      });
+        togglePause()
+      })
 
       const unsubEmergency = window.wingman.onEmergencyHide(() => {
-        setPaused(true);
-      });
+        setPaused(true)
+      })
 
       return () => {
-        unsubMode();
-        unsubPause();
-        unsubEmergency();
-        disconnect();
-      };
+        unsubMode()
+        unsubPause()
+        unsubEmergency()
+        disconnect()
+      }
     }
 
     return () => {
-      disconnect();
-    };
-  }, [connect, disconnect, setMode, togglePause, setPaused]);
+      disconnect()
+    }
+  }, [connect, disconnect, setMode, togglePause, setPaused])
 
   return (
     <div className="w-full h-full flex items-start justify-center pt-0">
+      {/* Main Dynamic Island */}
       <DynamicIsland />
+      
+      {/* Global Overlays */}
+      <SettingsPanel 
+        isOpen={isSettingsOpen} 
+        onClose={() => setSettingsOpen(false)} 
+      />
+      
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen} 
+        onClose={() => setCommandPaletteOpen(false)} 
+      />
+      
+      {/* Toast Notifications */}
       <Toaster
         position="bottom-center"
         toastOptions={{
@@ -60,7 +116,7 @@ function App() {
         }}
       />
     </div>
-  );
+  )
 }
 
-export default App;
+export default App
