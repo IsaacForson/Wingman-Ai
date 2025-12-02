@@ -2,15 +2,19 @@
  * Wingman AI - Main App Component
  */
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Toaster } from "react-hot-toast"
 import DynamicIsland from "./components/DynamicIsland/DynamicIsland"
 import { SettingsPanel } from "./components/Settings"
 import { CommandPalette } from "./components/CommandPalette"
+import { HistoryView } from "./components/History"
+import { ErrorBoundary } from "./components/ErrorBoundary"
+import { NotificationSystem } from "./components/Notifications"
+import { OnboardingFlow } from "./components/Onboarding"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 
-function App() {
+function AppContent() {
   const { 
     setMode, 
     togglePause, 
@@ -20,6 +24,12 @@ function App() {
     isCommandPaletteOpen,
     setCommandPaletteOpen
   } = useAppStore()
+  
+  const [isHistoryOpen, setHistoryOpen] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    // Check if first time user
+    return localStorage.getItem('wingman_onboarded') !== 'true'
+  })
   const { connect, disconnect } = useWebSocket()
 
   // Global keyboard shortcuts
@@ -43,16 +53,28 @@ function App() {
         togglePause()
       }
       
+      // Cmd/Ctrl + H -> History
+      if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+        e.preventDefault()
+        setHistoryOpen(true)
+      }
+      
       // Escape -> Close overlays
       if (e.key === 'Escape') {
         if (isCommandPaletteOpen) setCommandPaletteOpen(false)
         else if (isSettingsOpen) setSettingsOpen(false)
+        else if (isHistoryOpen) setHistoryOpen(false)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isCommandPaletteOpen, setSettingsOpen, setCommandPaletteOpen, togglePause])
+  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, setSettingsOpen, setCommandPaletteOpen, togglePause])
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('wingman_onboarded', 'true')
+    setShowOnboarding(false)
+  }
 
   useEffect(() => {
     // Connect to backend
@@ -85,6 +107,16 @@ function App() {
     }
   }, [connect, disconnect, setMode, togglePause, setPaused])
 
+  // Show onboarding for first-time users
+  if (showOnboarding) {
+    return (
+      <OnboardingFlow 
+        onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingComplete}
+      />
+    )
+  }
+
   return (
     <div className="w-full h-full flex items-start justify-center pt-0">
       {/* Main Dynamic Island */}
@@ -101,7 +133,15 @@ function App() {
         onClose={() => setCommandPaletteOpen(false)} 
       />
       
-      {/* Toast Notifications */}
+      <HistoryView
+        isOpen={isHistoryOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
+      
+      {/* Notification System */}
+      <NotificationSystem position="top-right" />
+      
+      {/* Toast Notifications (legacy) */}
       <Toaster
         position="bottom-center"
         toastOptions={{
@@ -116,6 +156,15 @@ function App() {
         }}
       />
     </div>
+  )
+}
+
+// Wrap with Error Boundary
+function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   )
 }
 
