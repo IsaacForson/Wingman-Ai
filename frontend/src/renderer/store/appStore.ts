@@ -110,6 +110,10 @@ interface AppState {
   isAchievementsOpen: boolean
   setAchievementsOpen: (open: boolean) => void
   
+  // Performance monitor
+  isPerformanceOpen: boolean
+  setPerformanceOpen: (open: boolean) => void
+  
   // Session
   sessionId: string | null
   setSessionId: (id: string | null) => void
@@ -229,6 +233,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Achievements panel
   isAchievementsOpen: false,
   setAchievementsOpen: (open) => set({ isAchievementsOpen: open }),
+  
+  // Performance monitor
+  isPerformanceOpen: false,
+  setPerformanceOpen: (open) => set({ isPerformanceOpen: open }),
   
   // Session
   sessionId: null,

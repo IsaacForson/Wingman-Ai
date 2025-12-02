@@ -16,6 +16,8 @@ import { PracticeModeUI } from "./components/Practice"
 import { MeetingHUD } from "./components/Meeting"
 import { FocusTimer, BreathingExercise, WellnessPanel } from "./components/Focus"
 import { AchievementsPanel } from "./components/Achievements"
+import { PerformanceMonitor } from "./components/Performance"
+import { TipsProvider, TipButton } from "./components/Tips"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 
@@ -43,7 +45,9 @@ function AppContent() {
     isWellnessOpen,
     setWellnessOpen,
     isAchievementsOpen,
-    setAchievementsOpen
+    setAchievementsOpen,
+    isPerformanceOpen,
+    setPerformanceOpen
   } = useAppStore()
   
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -208,6 +212,15 @@ function AppContent() {
         onClose={() => setAchievementsOpen(false)}
       />
       
+      {/* Performance Monitor */}
+      <PerformanceMonitor
+        isOpen={isPerformanceOpen}
+        onClose={() => setPerformanceOpen(false)}
+      />
+      
+      {/* Tip Button */}
+      <TipButton />
+      
       {/* Notification System */}
       <NotificationSystem position="top-right" />
       
@@ -229,11 +242,13 @@ function AppContent() {
   )
 }
 
-// Wrap with Error Boundary
+// Wrap with Error Boundary and Tips Provider
 function App() {
   return (
     <ErrorBoundary>
-      <AppContent />
+      <TipsProvider>
+        <AppContent />
+      </TipsProvider>
     </ErrorBoundary>
   )
 }
