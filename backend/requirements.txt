@@ -1,0 +1,62 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-socketio==5.11.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Audio Processing
+sounddevice==0.4.6
+numpy==1.26.3
+webrtcvad==2.0.10
+openai-whisper==20231117
+pydub==0.25.1
+
+# Screen & Vision
+mss==9.0.1
+pytesseract==0.3.10
+easyocr==1.7.1
+opencv-python==4.9.0.80
+Pillow==10.2.0
+
+# AI & NLP
+openai==1.10.0
+anthropic==0.18.0
+tiktoken==0.5.2
+langchain==0.1.4
+langchain-openai==0.0.5
+sentence-transformers==2.3.1
+
+# Knowledge Base & Search
+chromadb==0.4.22
+pypdf2==3.0.1
+pdfplumber==0.10.3
+python-docx==1.1.0
+beautifulsoup4==4.12.3
+requests==2.31.0
+
+# Data & Caching
+redis==5.0.1
+sqlalchemy==2.0.25
+aiosqlite==0.19.0
+
+# Utilities
+python-dotenv==1.0.0
+loguru==0.7.2
+watchdog==3.0.0
+pyperclip==1.8.2
+cryptography==41.0.7
+aiohttp==3.9.3
+aiofiles==23.2.1
+msgpack==1.0.7
+
+# macOS specific (for active window detection)
+pyobjc-framework-Cocoa==10.1;sys_platform=="darwin"
+pyobjc-framework-Quartz==10.1;sys_platform=="darwin"
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
