@@ -11,6 +11,11 @@ import { HistoryView } from "./components/History"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { NotificationSystem } from "./components/Notifications"
 import { OnboardingFlow } from "./components/Onboarding"
+import { AnalyticsDashboard } from "./components/Analytics"
+import { PracticeModeUI } from "./components/Practice"
+import { MeetingHUD } from "./components/Meeting"
+import { FocusTimer, BreathingExercise, WellnessPanel } from "./components/Focus"
+import { AchievementsPanel } from "./components/Achievements"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 
@@ -22,10 +27,25 @@ function AppContent() {
     isSettingsOpen,
     setSettingsOpen,
     isCommandPaletteOpen,
-    setCommandPaletteOpen
+    setCommandPaletteOpen,
+    isHistoryOpen,
+    setHistoryOpen,
+    isAnalyticsOpen,
+    setAnalyticsOpen,
+    isPracticeOpen,
+    setPracticeOpen,
+    isMeetingOpen,
+    setMeetingOpen,
+    isFocusTimerOpen,
+    setFocusTimerOpen,
+    isBreathingOpen,
+    setBreathingOpen,
+    isWellnessOpen,
+    setWellnessOpen,
+    isAchievementsOpen,
+    setAchievementsOpen
   } = useAppStore()
   
-  const [isHistoryOpen, setHistoryOpen] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(() => {
     // Check if first time user
     return localStorage.getItem('wingman_onboarded') !== 'true'
@@ -69,7 +89,7 @@ function AppContent() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, setSettingsOpen, setCommandPaletteOpen, togglePause])
+  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, setSettingsOpen, setCommandPaletteOpen, setHistoryOpen, togglePause])
 
   const handleOnboardingComplete = () => {
     localStorage.setItem('wingman_onboarded', 'true')
@@ -136,6 +156,56 @@ function AppContent() {
       <HistoryView
         isOpen={isHistoryOpen}
         onClose={() => setHistoryOpen(false)}
+      />
+      
+      {/* Analytics Dashboard */}
+      <AnalyticsDashboard
+        isOpen={isAnalyticsOpen}
+        onClose={() => setAnalyticsOpen(false)}
+      />
+      
+      {/* Practice Mode */}
+      <PracticeModeUI
+        isOpen={isPracticeOpen}
+        onClose={() => setPracticeOpen(false)}
+      />
+      
+      {/* Meeting HUD */}
+      <MeetingHUD
+        isOpen={isMeetingOpen}
+        onClose={() => setMeetingOpen(false)}
+      />
+      
+      {/* Focus Timer */}
+      <FocusTimer
+        isOpen={isFocusTimerOpen}
+        onClose={() => setFocusTimerOpen(false)}
+      />
+      
+      {/* Breathing Exercise */}
+      <BreathingExercise
+        isOpen={isBreathingOpen}
+        onClose={() => setBreathingOpen(false)}
+      />
+      
+      {/* Wellness Panel */}
+      <WellnessPanel
+        isOpen={isWellnessOpen}
+        onClose={() => setWellnessOpen(false)}
+        onOpenFocusTimer={() => {
+          setWellnessOpen(false)
+          setFocusTimerOpen(true)
+        }}
+        onOpenBreathing={() => {
+          setWellnessOpen(false)
+          setBreathingOpen(true)
+        }}
+      />
+      
+      {/* Achievements */}
+      <AchievementsPanel
+        isOpen={isAchievementsOpen}
+        onClose={() => setAchievementsOpen(false)}
       />
       
       {/* Notification System */}

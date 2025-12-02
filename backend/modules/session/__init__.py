@@ -4,10 +4,13 @@ Session management and persistence
 """
 
 from .session_manager import SessionManager, Session, QuestionAnswer
+from .exporter import SessionExporter, ExportData
 
 __all__ = [
     "SessionManager",
     "Session",
-    "QuestionAnswer"
+    "QuestionAnswer",
+    "SessionExporter",
+    "ExportData"
 ]
 

@@ -78,6 +78,38 @@ interface AppState {
   isCommandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
   
+  // History panel
+  isHistoryOpen: boolean
+  setHistoryOpen: (open: boolean) => void
+  
+  // Analytics dashboard
+  isAnalyticsOpen: boolean
+  setAnalyticsOpen: (open: boolean) => void
+  
+  // Practice mode
+  isPracticeOpen: boolean
+  setPracticeOpen: (open: boolean) => void
+  
+  // Meeting HUD
+  isMeetingOpen: boolean
+  setMeetingOpen: (open: boolean) => void
+  
+  // Focus timer
+  isFocusTimerOpen: boolean
+  setFocusTimerOpen: (open: boolean) => void
+  
+  // Breathing exercise
+  isBreathingOpen: boolean
+  setBreathingOpen: (open: boolean) => void
+  
+  // Wellness panel
+  isWellnessOpen: boolean
+  setWellnessOpen: (open: boolean) => void
+  
+  // Achievements panel
+  isAchievementsOpen: boolean
+  setAchievementsOpen: (open: boolean) => void
+  
   // Session
   sessionId: string | null
   setSessionId: (id: string | null) => void
@@ -165,6 +197,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Command palette
   isCommandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
+  
+  // History panel
+  isHistoryOpen: false,
+  setHistoryOpen: (open) => set({ isHistoryOpen: open }),
+  
+  // Analytics dashboard
+  isAnalyticsOpen: false,
+  setAnalyticsOpen: (open) => set({ isAnalyticsOpen: open }),
+  
+  // Practice mode
+  isPracticeOpen: false,
+  setPracticeOpen: (open) => set({ isPracticeOpen: open }),
+  
+  // Meeting HUD
+  isMeetingOpen: false,
+  setMeetingOpen: (open) => set({ isMeetingOpen: open }),
+  
+  // Focus timer
+  isFocusTimerOpen: false,
+  setFocusTimerOpen: (open) => set({ isFocusTimerOpen: open }),
+  
+  // Breathing exercise
+  isBreathingOpen: false,
+  setBreathingOpen: (open) => set({ isBreathingOpen: open }),
+  
+  // Wellness panel
+  isWellnessOpen: false,
+  setWellnessOpen: (open) => set({ isWellnessOpen: open }),
+  
+  // Achievements panel
+  isAchievementsOpen: false,
+  setAchievementsOpen: (open) => set({ isAchievementsOpen: open }),
   
   // Session
   sessionId: null,
