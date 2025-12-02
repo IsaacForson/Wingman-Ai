@@ -1,69 +1,77 @@
 #!/bin/bash
 
 # Wingman AI - Development Script
-# Starts both backend and frontend in development mode
+# Starts both backend and frontend for development
 
 set -e
 
-echo "🚀 Starting Wingman AI Development Environment"
-echo "================================================"
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+BACKEND_DIR="$PROJECT_ROOT/backend"
 
 # Colors
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Check if we're in the project root
-if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
-    echo "Error: Please run this script from the project root directory"
-    exit 1
-fi
+echo -e "${BLUE}🚀 Starting Wingman AI Development Environment${NC}"
+echo "================================================"
 
-# Function to cleanup background processes
+# Function to cleanup on exit
 cleanup() {
     echo ""
-    echo "🛑 Shutting down..."
-    kill $BACKEND_PID 2>/dev/null || true
-    kill $FRONTEND_PID 2>/dev/null || true
+    echo -e "${YELLOW}Shutting down...${NC}"
+    kill $(jobs -p) 2>/dev/null
     exit 0
 }
 
 trap cleanup SIGINT SIGTERM
 
-# Start backend
-echo -e "${BLUE}Starting Python backend...${NC}"
-cd backend
+# Start Backend
+echo ""
+echo -e "${YELLOW}Starting Python backend...${NC}"
+cd "$BACKEND_DIR"
 
-# Check for virtual environment
-if [ ! -d "venv" ]; then
+# Check if venv exists
+if [ -d "venv" ]; then
+    source venv/bin/activate
+else
     echo "Creating virtual environment..."
     python3 -m venv venv
-fi
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Install dependencies if needed
-if [ ! -f "venv/.installed" ]; then
-    echo "Installing backend dependencies..."
+    source venv/bin/activate
     pip install -r requirements.txt
-    touch venv/.installed
 fi
 
-# Start backend
+# Create .env if it doesn't exist
+if [ ! -f ".env" ]; then
+    if [ -f "env.example.txt" ]; then
+        cp env.example.txt .env
+        echo -e "${YELLOW}Created .env from env.example.txt - please add your API keys${NC}"
+    fi
+fi
+
+# Start backend in background
 python main.py &
 BACKEND_PID=$!
-cd ..
-
 echo -e "${GREEN}✓ Backend started (PID: $BACKEND_PID)${NC}"
 
 # Wait for backend to be ready
 echo "Waiting for backend to be ready..."
-sleep 3
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:8765/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Backend is ready!${NC}"
+        break
+    fi
+    sleep 1
+done
 
-# Start frontend
-echo -e "${BLUE}Starting Electron frontend...${NC}"
-cd frontend
+# Start Frontend
+echo ""
+echo -e "${YELLOW}Starting Electron frontend...${NC}"
+cd "$FRONTEND_DIR"
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
@@ -74,20 +82,17 @@ fi
 # Start frontend
 npm run electron:dev &
 FRONTEND_PID=$!
-cd ..
-
 echo -e "${GREEN}✓ Frontend started (PID: $FRONTEND_PID)${NC}"
 
 echo ""
 echo "================================================"
 echo -e "${GREEN}🎉 Wingman AI is running!${NC}"
 echo ""
-echo "Backend:  http://localhost:8765"
-echo "Frontend: http://localhost:5173 (Vite dev server)"
+echo "Backend:  http://127.0.0.1:8765"
+echo "Frontend: http://localhost:5173"
 echo ""
-echo "Press Ctrl+C to stop all services"
+echo "Press Ctrl+C to stop both servers"
 echo "================================================"
 
 # Wait for both processes
 wait
-

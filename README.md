@@ -1,195 +1,199 @@
 # 🚀 Wingman AI
 
-> Your AI co-pilot for interviews, exams, meetings, and deep work. Always present, never in the way.
+**Your AI co-pilot for interviews, exams, meetings, and deep work.**
 
-![Wingman AI](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
+Wingman AI is a desktop application that provides real-time AI assistance by listening to conversations, analyzing screen content, and generating intelligent responses.
 
 ## ✨ Features
 
-### Core Functionality
-- 🎙️ **Real-time Audio Transcription** - Captures and transcribes conversations in real-time
-- 🔍 **Question Detection** - Automatically detects questions from audio and screen
-- 🤖 **AI-Powered Answers** - Generates contextual answers using GPT-4/Claude
-- 📸 **Screen Analysis** - OCR and code detection from your screen
-- 🏝️ **Dynamic Island UI** - Beautiful, unobtrusive interface that morphs based on state
-- 🔒 **Screen-Share Safe** - Invisible to screen recording and sharing
+- **Dynamic Island UI** - Beautiful, non-intrusive interface
+- **Real-time Transcription** - Live speech-to-text
+- **AI-Powered Answers** - Multiple AI providers (Groq, Gemini, OpenAI, Claude, Ollama)
+- **Screen Analysis** - OCR and code detection
+- **Multiple Modes** - Interview, Study, Work, Meeting, Research
+- **Practice Mode** - Mock interviews with STAR method coaching
+- **Meeting Intelligence** - Speaker tracking, action items, summaries
+- **Wellness Features** - Pomodoro timer, breathing exercises, break reminders
+- **Screen-Share Safe** - Invisible to video calls
 
-### Multiple Modes
-- **Interview Mode** - Technical and behavioral interview assistance
-- **Study Mode** - Learning and exam preparation
-- **Work Mode** - Productivity and coding help
-- **Meeting Mode** - Real-time meeting intelligence
-- **Research Mode** - Deep research assistance
-- **Practice Mode** - Mock interview practice with feedback
+## 🛠️ Tech Stack
 
-## 🏗️ Architecture
+- **Frontend**: Electron + React + TypeScript + Vite + Tailwind CSS
+- **Backend**: Python + FastAPI + Socket.io
+- **AI**: OpenAI, Anthropic, Groq, Google Gemini, Ollama, Hugging Face
 
-```
-wingman-ai/
-├── backend/           # Python FastAPI backend
-│   ├── core/          # Core engine and WebSocket server
-│   ├── modules/       # Feature modules (audio, screen, AI, etc.)
-│   └── utils/         # Utilities and helpers
-│
-├── frontend/          # Electron + React frontend
-│   ├── src/main/      # Electron main process
-│   ├── src/preload/   # Preload scripts
-│   └── src/renderer/  # React application
-│       ├── components/    # UI components
-│       ├── hooks/         # Custom React hooks
-│       ├── store/         # Zustand state management
-│       └── services/      # API services
+## 📋 Prerequisites
+
+- **Node.js** 18+ 
+- **Python** 3.9+
+- **macOS** 12+ (for full features)
+
+### macOS Dependencies
+
+```bash
+# Install Tesseract for OCR
+brew install tesseract
+
+# Install PortAudio for audio capture
+brew install portaudio
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Tesseract OCR (for screen text extraction)
-
-### Backend Setup
+### 1. Clone and Setup
 
 ```bash
-# Navigate to backend
+cd Wingman-Ai
+
+# Setup backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Create .env file
-cp .env.example .env
-# Edit .env with your API keys
-
-# Start the backend
-python main.py
-```
-
-### Frontend Setup
-
-```bash
-# Navigate to frontend
-cd frontend
-
-# Install dependencies
+# Setup frontend
+cd ../frontend
 npm install
-
-# Start development
-npm run electron:dev
 ```
 
-## ⚙️ Configuration
+### 2. Configure API Keys
 
 Create a `.env` file in the `backend/` directory:
 
 ```env
-# AI Provider API Keys (at least one required)
-OPENAI_API_KEY=sk-your-openai-key
-ANTHROPIC_API_KEY=sk-your-anthropic-key
+# Free AI Providers (recommended to start)
+GROQ_API_KEY=your_groq_key
+GOOGLE_API_KEY=your_gemini_key
 
-# Optional: Voice output
-ELEVENLABS_API_KEY=your-elevenlabs-key
-
-# Model Settings
-DEFAULT_MODEL=gpt-4-turbo-preview
-WHISPER_MODEL=base
+# Default provider
+AI_PROVIDER=groq
 ```
 
-## ⌨️ Keyboard Shortcuts
+Get free API keys:
+- **Groq** (fastest): https://console.groq.com
+- **Google Gemini**: https://makersuite.google.com/app/apikey
+- **Hugging Face**: https://huggingface.co/settings/tokens
 
-| Action | Shortcut |
-|--------|----------|
-| Toggle Visibility | `Cmd/Ctrl + Shift + W` |
-| Command Palette | `Cmd/Ctrl + Space` |
-| Pause/Resume | `Cmd/Ctrl + Shift + P` |
-| Capture Screen | `Cmd/Ctrl + Shift + S` |
-| Emergency Hide | `Cmd/Ctrl + Shift + Escape` |
+### 3. Run Development Mode
 
-## 🎯 Dynamic Island States
+```bash
+# From project root
+./scripts/dev.sh
+```
 
-1. **Nano** (60×40px) - Minimal pulsing indicator
-2. **Mini** (140×44px) - Listening with waveform
-3. **Normal** (420×64px) - Question preview and status
-4. **Expanded** (600×400px) - Full answer display
-5. **Fullscreen** (900×600px) - Complex content view
+Or manually:
 
-## 🔧 Tech Stack
+```bash
+# Terminal 1: Backend
+cd backend
+source venv/bin/activate
+python main.py
 
-### Backend
-- **FastAPI** - Async web framework
-- **Socket.IO** - Real-time WebSocket communication
-- **Whisper** - Speech-to-text transcription
-- **OpenAI/Anthropic** - LLM providers
-- **mss** - Screen capture
-- **Tesseract/EasyOCR** - Text extraction
+# Terminal 2: Frontend
+cd frontend
+npm run electron:dev
+```
 
-### Frontend
-- **Electron** - Desktop application framework
-- **React 18** - UI library
-- **Vite** - Build tool
-- **Framer Motion** - Animations
-- **Tailwind CSS** - Styling
-- **Zustand** - State management
-- **Socket.IO Client** - WebSocket client
+## 📦 Building for Distribution
 
-## 📊 Performance Targets
+### Build macOS DMG
 
-- Audio transcription latency: <1 second
-- Question detection: <0.5 seconds
-- AI response (streaming start): <0.5 seconds
-- UI animations: 60fps
-- Memory (idle): <300MB
-- CPU (idle): <5%
+```bash
+# Make the build script executable
+chmod +x scripts/build-mac.sh
+
+# Build the DMG
+./scripts/build-mac.sh
+```
+
+The DMG file will be in `frontend/release/`.
+
+### Manual Build
+
+```bash
+cd frontend
+npm run build:mac
+```
+
+## 🎮 Usage
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+Space` | Command Palette |
+| `Cmd+,` | Settings |
+| `Cmd+H` | History |
+| `Cmd+Shift+P` | Pause/Resume |
+| `Esc` | Minimize/Close |
+
+### Operating Modes
+
+- **Interview** - Optimized for job interviews
+- **Study** - Detailed explanations with examples
+- **Work** - Concise, actionable answers
+- **Meeting** - Speaker tracking and summaries
+- **Research** - Academic, thorough responses
 
 ## 🔒 Privacy & Security
 
-- **Screen-share protection** - Window excluded from screen capture
-- **Local processing option** - Run AI models locally
-- **Encrypted storage** - AES-256 for sensitive data
-- **No cloud storage by default** - All data stays local
-- **API key encryption** - Stored securely in OS keychain
+- **Local Processing** - Use Ollama for 100% offline operation
+- **Screen-Share Safe** - Hidden from screen capture
+- **No Cloud Storage** - All data stays on your device
+- **Encrypted Sessions** - Optional session encryption
 
-## 🗺️ Roadmap
+## 📁 Project Structure
 
-### Phase 1 (MVP) ✅
-- Real-time audio transcription
-- Question detection
-- AI answer generation
-- Dynamic Island UI
+```
+Wingman-Ai/
+├── backend/           # Python FastAPI backend
+│   ├── core/          # Core engine & websocket
+│   ├── modules/       # Feature modules
+│   │   ├── ai/        # AI processing
+│   │   ├── audio/     # Audio capture & transcription
+│   │   ├── screen/    # Screen capture & OCR
+│   │   └── ...
+│   └── main.py        # Entry point
+│
+├── frontend/          # Electron + React frontend
+│   ├── src/
+│   │   ├── main/      # Electron main process
+│   │   ├── renderer/  # React app
+│   │   └── preload/   # Preload scripts
+│   └── package.json
+│
+└── scripts/           # Build & dev scripts
+```
 
-### Phase 2 (In Progress)
-- Knowledge base integration
-- Multi-language support
-- Meeting intelligence
-- Voice output
+## 🐛 Troubleshooting
 
-### Phase 3 (Planned)
-- Practice mode with feedback
-- Analytics dashboard
-- Session recording/replay
-- Plugin system
+### Backend won't start
+- Check Python version: `python3 --version` (need 3.9+)
+- Ensure venv is activated: `source venv/bin/activate`
+- Check port 8765 is free: `lsof -i :8765`
 
-## 🤝 Contributing
+### No audio capture
+- Grant microphone permission in System Preferences
+- Check audio device: `python -c "import sounddevice; print(sounddevice.query_devices())"`
 
-Contributions are welcome! Please read our contributing guidelines before submitting a PR.
+### OCR not working
+- Install Tesseract: `brew install tesseract`
+- Check installation: `tesseract --version`
+
+### Screen capture permission
+On macOS, grant Screen Recording permission:
+1. System Preferences → Security & Privacy → Privacy
+2. Select "Screen Recording"
+3. Add Wingman AI
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+MIT License - see LICENSE file
 
-## 🙏 Acknowledgments
+## 🤝 Contributing
 
-- OpenAI for GPT-4 and Whisper
-- Anthropic for Claude
-- The Electron and React communities
+Contributions welcome! Please read our contributing guidelines first.
 
 ---
 
-**Built with ❤️ for anyone who wants an AI co-pilot by their side.**
-
+**Built with ❤️ for productive people**

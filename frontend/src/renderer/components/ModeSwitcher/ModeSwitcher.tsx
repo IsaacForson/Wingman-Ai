@@ -100,9 +100,7 @@ const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ variant = 'dropdown' }) => 
     setMode(newMode)
     setIsOpen(false)
     const modeConfig = modes.find(m => m.id === newMode)
-    toast.success(`Switched to ${modeConfig?.name} Mode`, {
-      icon: modeConfig?.icon
-    })
+    toast.success(`Switched to ${modeConfig?.name} Mode`)
   }
 
   // Compact variant - just the icon

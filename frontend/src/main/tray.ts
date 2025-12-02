@@ -3,7 +3,7 @@
  * System tray integration for quick access
  */
 
-import { app, Tray, Menu, nativeImage, BrowserWindow } from 'electron'
+import { Tray, Menu, nativeImage, BrowserWindow, NativeImage } from 'electron'
 import path from 'path'
 
 let tray: Tray | null = null
@@ -23,7 +23,7 @@ export function createTray(options: TrayOptions): Tray {
   const iconPath = path.join(__dirname, '../../assets/tray-icon.png')
   
   // Create a simple icon programmatically if file doesn't exist
-  let icon: nativeImage
+  let icon: NativeImage
   try {
     icon = nativeImage.createFromPath(iconPath)
     if (icon.isEmpty()) {
@@ -61,7 +61,7 @@ export function createTray(options: TrayOptions): Tray {
   return tray
 }
 
-function createDefaultIcon(): nativeImage {
+function createDefaultIcon(): NativeImage {
   // Create a simple 16x16 icon
   const size = 16
   const canvas = Buffer.alloc(size * size * 4)
