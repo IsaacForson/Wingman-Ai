@@ -25,14 +25,21 @@ class Settings(BaseSettings):
     websocket_path: str = "/ws"
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     
-    # AI Providers
+    # AI Providers - API Keys
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY")
+    google_api_key: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
+    together_api_key: Optional[str] = Field(default=None, env="TOGETHER_API_KEY")  # Paid
+    huggingface_api_key: Optional[str] = Field(default=None, env="HUGGINGFACE_API_KEY")
+    ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
     elevenlabs_api_key: Optional[str] = Field(default=None, env="ELEVENLABS_API_KEY")
     
     # AI Model Settings
-    default_model: str = Field(default="gpt-4-turbo-preview", env="DEFAULT_MODEL")
-    fallback_model: str = Field(default="gpt-3.5-turbo", env="FALLBACK_MODEL")
+    # Provider options: openai, anthropic, groq, gemini, together, huggingface, ollama
+    ai_provider: str = Field(default="groq", env="AI_PROVIDER")
+    default_model: str = Field(default="llama-3.3-70b-versatile", env="DEFAULT_MODEL")
+    fallback_model: str = Field(default="llama-3.1-8b-instant", env="FALLBACK_MODEL")
     max_tokens: int = Field(default=2048, env="MAX_TOKENS")
     temperature: float = Field(default=0.7, env="TEMPERATURE")
     

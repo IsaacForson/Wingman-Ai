@@ -27,7 +27,9 @@ export function useWebSocket() {
     setCurrentQuestion,
     setSessionId,
     incrementQuestions,
-    incrementAnswers
+    incrementAnswers,
+    setAIProvider,
+    setAvailableProviders
   } = useAppStore()
 
   const connect = useCallback(() => {
@@ -175,12 +177,32 @@ export function useWebSocket() {
       console.log('Mode changed:', data.data?.new_mode)
     })
 
+    // AI Provider events
+    socket.on('ai_providers', (data: { current_provider?: string; current_model?: string; available_providers?: string[] }) => {
+      if (data.available_providers) {
+        setAvailableProviders(data.available_providers as any[])
+      }
+      if (data.current_provider) {
+        setAIProvider(data.current_provider as any, data.current_model)
+      }
+    })
+
+    socket.on('ai_provider_changed', (data: { provider?: string; model?: string }) => {
+      if (data.provider) {
+        setAIProvider(data.provider as any, data.model)
+        toast.success(`Switched to ${data.provider}`)
+      }
+    })
+
+    // Request AI providers on connect
+    socket.emit('get_ai_providers')
+
     socketRef.current = socket
   }, [
     setConnected, setListening, setProcessing, setIslandState,
     addTranscriptLine, setCurrentAnswer, appendToAnswer,
     addToHistory, setCurrentQuestion, setSessionId, 
-    incrementQuestions, incrementAnswers
+    incrementQuestions, incrementAnswers, setAIProvider, setAvailableProviders
   ])
 
   const disconnect = useCallback(() => {
@@ -208,6 +230,10 @@ export function useWebSocket() {
   }, [emit])
   const pause = useCallback(() => emit('pause'), [emit])
   const resume = useCallback(() => emit('resume'), [emit])
+  const getAIProviders = useCallback(() => emit('get_ai_providers'), [emit])
+  const setAIProviderBackend = useCallback((provider: string, model?: string) => {
+    emit('set_ai_provider', { provider, model })
+  }, [emit])
 
   return {
     connect,
@@ -219,7 +245,9 @@ export function useWebSocket() {
     submitQuestion,
     setBackendMode,
     pause,
-    resume
+    resume,
+    getAIProviders,
+    setAIProvider: setAIProviderBackend
   }
 }
 

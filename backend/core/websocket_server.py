@@ -125,6 +125,34 @@ class WebSocketManager:
                 await self.sio.emit("status", status, room=sid)
         
         @self.sio.event
+        async def get_ai_providers(sid):
+            """Get available AI providers"""
+            from main import engine
+            if engine and engine._ai_module:
+                generator = engine._ai_module.answer_generator
+                await self.sio.emit("ai_providers", {
+                    "current_provider": generator.provider,
+                    "current_model": generator.default_model,
+                    "available_providers": generator.get_available_providers()
+                }, room=sid)
+        
+        @self.sio.event
+        async def set_ai_provider(sid, data):
+            """Set the AI provider"""
+            provider = data.get("provider", "")
+            model = data.get("model")
+            from main import engine
+            if engine and engine._ai_module:
+                generator = engine._ai_module.answer_generator
+                generator.set_provider(provider)
+                if model:
+                    generator.default_model = model
+                await self.sio.emit("ai_provider_changed", {
+                    "provider": generator.provider,
+                    "model": generator.default_model
+                }, room=sid)
+        
+        @self.sio.event
         async def ping(sid):
             """Handle ping for latency measurement"""
             await self.sio.emit("pong", {"timestamp": datetime.now().isoformat()}, room=sid)

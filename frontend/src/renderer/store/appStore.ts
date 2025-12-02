@@ -7,6 +7,7 @@ import { create } from 'zustand'
 
 export type IslandState = 'nano' | 'mini' | 'normal' | 'expanded' | 'fullscreen'
 export type OperatingMode = 'interview' | 'study' | 'work' | 'meeting' | 'research' | 'practice'
+export type AIProvider = 'openai' | 'anthropic' | 'groq' | 'gemini' | 'together' | 'huggingface' | 'ollama'
 
 interface TranscriptLine {
   id: string
@@ -84,6 +85,13 @@ interface AppState {
   answersCount: number
   incrementQuestions: () => void
   incrementAnswers: () => void
+  
+  // AI Provider
+  aiProvider: AIProvider
+  aiModel: string
+  availableProviders: AIProvider[]
+  setAIProvider: (provider: AIProvider, model?: string) => void
+  setAvailableProviders: (providers: AIProvider[]) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -164,6 +172,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   questionsCount: 0,
   answersCount: 0,
   incrementQuestions: () => set((state) => ({ questionsCount: state.questionsCount + 1 })),
-  incrementAnswers: () => set((state) => ({ answersCount: state.answersCount + 1 }))
+  incrementAnswers: () => set((state) => ({ answersCount: state.answersCount + 1 })),
+  
+  // AI Provider
+  aiProvider: 'groq',
+  aiModel: 'llama-3.3-70b-versatile',
+  availableProviders: ['groq', 'ollama'],
+  setAIProvider: (provider, model) => set({ 
+    aiProvider: provider,
+    ...(model && { aiModel: model })
+  }),
+  setAvailableProviders: (providers) => set({ availableProviders: providers })
 }))
 

@@ -14,10 +14,12 @@ import {
   Minimize2,
   ThumbsUp,
   ThumbsDown,
-  RotateCcw
+  RotateCcw,
+  Settings
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
+import { AIProviderSelector } from '../AIProviderSelector'
 
 const ExpandedState = () => {
   const { 
@@ -25,10 +27,12 @@ const ExpandedState = () => {
     currentAnswer,
     islandState,
     setIslandState,
-    isProcessing
+    isProcessing,
+    aiProvider
   } = useAppStore()
   
   const [copied, setCopied] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll as new content arrives
@@ -76,9 +80,15 @@ const ExpandedState = () => {
           <span className="text-xs text-white/40 font-medium uppercase tracking-wide">
             {isProcessing ? 'Generating...' : 'Answer'}
           </span>
+          <span className="text-[10px] text-white/30 px-1.5 py-0.5 bg-white/5 rounded">
+            {aiProvider}
+          </span>
         </div>
         
         <div className="flex items-center gap-1">
+          <ActionButton onClick={() => setShowSettings(!showSettings)}>
+            <Settings className={`w-3.5 h-3.5 ${showSettings ? 'text-wingman-400' : ''}`} />
+          </ActionButton>
           <ActionButton onClick={toggleFullscreen}>
             {islandState === 'fullscreen' ? (
               <Minimize2 className="w-3.5 h-3.5" />
@@ -91,6 +101,18 @@ const ExpandedState = () => {
           </ActionButton>
         </div>
       </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <motion.div
+          className="mb-3 pb-3 border-b border-white/10"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+        >
+          <AIProviderSelector />
+        </motion.div>
+      )}
 
       {/* Question */}
       {currentQuestion && (

@@ -142,6 +142,44 @@ async def set_mode(mode: str):
     return {"error": "Engine not initialized"}
 
 
+@app.get("/api/ai/providers")
+async def get_ai_providers():
+    """Get available AI providers and current selection"""
+    if engine and engine._ai_module:
+        generator = engine._ai_module.answer_generator
+        return {
+            "current_provider": generator.provider,
+            "current_model": generator.default_model,
+            "available_providers": generator.get_available_providers(),
+            "provider_models": {
+                "openai": ["gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"],
+                "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+                "groq": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+                "gemini": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
+                "together": ["meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"],
+                "huggingface": ["meta-llama/Meta-Llama-3-8B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2"],
+                "ollama": ["llama3.2", "llama3.1", "mistral", "codellama", "phi3"]
+            }
+        }
+    return {"error": "Engine not initialized"}
+
+
+@app.post("/api/ai/provider/{provider}")
+async def set_ai_provider(provider: str, model: str = None):
+    """Set the AI provider and optionally the model"""
+    if engine and engine._ai_module:
+        generator = engine._ai_module.answer_generator
+        generator.set_provider(provider)
+        if model:
+            generator.default_model = model
+        return {
+            "provider": generator.provider,
+            "model": generator.default_model,
+            "status": "updated"
+        }
+    return {"error": "Engine not initialized"}
+
+
 def main():
     """Run the application"""
     import uvicorn
