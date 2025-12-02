@@ -7,11 +7,19 @@ from .audio_module import AudioModule
 from .capture import AudioCapture
 from .transcription import Transcriber
 from .vad import VoiceActivityDetector
+from .speaker_id import SpeakerIdentifier, SpeakerProfile, SpeakerSegment
+from .sentiment import SentimentAnalyzer, SentimentResult, SentimentLevel
 
 __all__ = [
     "AudioModule",
     "AudioCapture",
     "Transcriber",
-    "VoiceActivityDetector"
+    "VoiceActivityDetector",
+    "SpeakerIdentifier",
+    "SpeakerProfile",
+    "SpeakerSegment",
+    "SentimentAnalyzer",
+    "SentimentResult",
+    "SentimentLevel"
 ]
 
