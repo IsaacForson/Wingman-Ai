@@ -125,6 +125,12 @@ async def root():
     }
 
 
+@app.get("/health")
+async def simple_health():
+    """Simple health check for quick startup verification"""
+    return {"status": "ok", "version": settings.app_version}
+
+
 @app.get("/api/status")
 async def get_status():
     """Get current engine status"""

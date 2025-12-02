@@ -1,10 +1,13 @@
 /**
  * Wingman AI - Electron Main Process
- * Handles window management, system tray, and global hotkeys
+ * Handles window management, system tray, global hotkeys, and backend auto-start
  */
 
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage } from 'electron'
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage } from 'electron'
 import path from 'path'
+import fs from 'fs'
+import { spawn, ChildProcess } from 'child_process'
+import http from 'http'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -19,6 +22,10 @@ try {
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let backendProcess: ChildProcess | null = null
+
+const BACKEND_URL = 'http://127.0.0.1:8765'
+const BACKEND_HEALTH_ENDPOINT = '/health'
 
 // Window configuration
 const WINDOW_CONFIG = {
@@ -43,7 +50,7 @@ function createWindow(): void {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
-    vibrancy: 'ultra-dark',
+    vibrancy: 'under-window',
     visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -91,7 +98,7 @@ function createTray(): void {
     : path.join(__dirname, '../resources/tray-icon.png')
 
   // Create a small icon for tray (if file doesn't exist, use a placeholder)
-  let trayIcon: nativeImage
+  let trayIcon: NativeImage
   try {
     trayIcon = nativeImage.createFromPath(iconPath)
     if (trayIcon.isEmpty()) {
@@ -260,8 +267,114 @@ function setupIPC(): void {
   })
 }
 
+// Backend management
+async function startBackend(): Promise<boolean> {
+  return new Promise((resolve) => {
+    // First check if backend is already running
+    checkBackendHealth().then((isHealthy) => {
+      if (isHealthy) {
+        console.log('✅ Backend already running')
+        resolve(true)
+        return
+      }
+
+      // Backend not running, start it
+      console.log('🚀 Starting backend...')
+      
+      const backendPath = path.join(app.getAppPath(), '..', 'backend')
+      const pythonPath = process.platform === 'win32' ? 'python' : 'python3'
+      
+      // Try to find venv python first
+      const venvPython = path.join(backendPath, 'venv', 'bin', 'python')
+      const venvPythonWin = path.join(backendPath, 'venv', 'Scripts', 'python.exe')
+      
+      let pythonExecutable = pythonPath
+      if (fs.existsSync(venvPython)) {
+        pythonExecutable = venvPython
+      } else if (fs.existsSync(venvPythonWin)) {
+        pythonExecutable = venvPythonWin
+      }
+
+      backendProcess = spawn(pythonExecutable, ['main.py'], {
+        cwd: backendPath,
+        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+
+      backendProcess.stdout?.on('data', (data) => {
+        console.log(`[Backend] ${data.toString().trim()}`)
+      })
+
+      backendProcess.stderr?.on('data', (data) => {
+        console.error(`[Backend Error] ${data.toString().trim()}`)
+      })
+
+      backendProcess.on('error', (err) => {
+        console.error('Failed to start backend:', err)
+        resolve(false)
+      })
+
+      backendProcess.on('exit', (code) => {
+        console.log(`Backend exited with code ${code}`)
+        backendProcess = null
+      })
+
+      // Wait for backend to be ready
+      waitForBackend(30).then((ready) => {
+        if (ready) {
+          console.log('✅ Backend is ready')
+        } else {
+          console.error('❌ Backend failed to start')
+        }
+        resolve(ready)
+      })
+    })
+  })
+}
+
+function checkBackendHealth(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(`${BACKEND_URL}${BACKEND_HEALTH_ENDPOINT}`, (res) => {
+      resolve(res.statusCode === 200)
+    })
+    
+    req.on('error', () => {
+      resolve(false)
+    })
+    
+    req.setTimeout(2000, () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
+
+async function waitForBackend(maxAttempts: number): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const healthy = await checkBackendHealth()
+    if (healthy) return true
+    
+    // Wait 1 second between attempts
+    await new Promise(r => setTimeout(r, 1000))
+  }
+  return false
+}
+
+function stopBackend(): void {
+  if (backendProcess) {
+    console.log('Stopping backend...')
+    backendProcess.kill('SIGTERM')
+    backendProcess = null
+  }
+}
+
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Start backend first (in production)
+  if (process.env.NODE_ENV !== 'development') {
+    await startBackend()
+  }
+  
   createWindow()
   createTray()
   registerGlobalShortcuts()
@@ -286,10 +399,11 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  stopBackend()
 })
 
 // Handle certificate errors (for development)
-app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+app.on('certificate-error', (event, _webContents, url, _error, _certificate, callback) => {
   if (url.startsWith('https://localhost')) {
     event.preventDefault()
     callback(true)

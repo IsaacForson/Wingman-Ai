@@ -47,16 +47,27 @@ async def health_check():
             "error": str(e)
         }
     
-    # Check AI providers
+    # Check AI providers (including free options)
     ai_status = {}
     if settings.openai_api_key:
         ai_status["openai"] = "configured"
     if settings.anthropic_api_key:
         ai_status["anthropic"] = "configured"
+    if settings.groq_api_key:
+        ai_status["groq"] = "configured"
+    if settings.google_api_key:
+        ai_status["gemini"] = "configured"
+    if settings.huggingface_api_key:
+        ai_status["huggingface"] = "configured"
+    if settings.together_api_key:
+        ai_status["together"] = "configured"
+    # Ollama is always "available" if local
+    ai_status["ollama"] = "available (local)"
     
     components["ai_providers"] = {
         "status": "healthy" if ai_status else "not_configured",
-        "providers": ai_status
+        "providers": ai_status,
+        "default": settings.default_ai_provider
     }
     
     # Check OCR
