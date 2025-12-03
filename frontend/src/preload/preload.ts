@@ -15,6 +15,14 @@ export interface WingmanAPI {
   setIgnoreMouse: (ignore: boolean) => Promise<void>
   getScreenInfo: () => Promise<{ width: number; height: number; scaleFactor: number }>
   
+  // Settings-related window options
+  setLaunchAtStartup: (enabled: boolean) => Promise<void>
+  setShowInDock: (show: boolean) => Promise<void>
+  setWindowOpacity: (opacity: number) => Promise<void>
+  setHideFromScreenCapture: (hide: boolean) => Promise<void>
+  setIslandPosition: (position: string) => Promise<void>
+  setHotkey: (action: string, keys: string) => Promise<void>
+  
   // Mouse enter/leave island (for click-through)
   mouseEnterIsland: () => void
   mouseLeaveIsland: () => void
@@ -41,6 +49,14 @@ contextBridge.exposeInMainWorld('wingman', {
   setAlwaysOnTop: (flag: boolean) => ipcRenderer.invoke('set-always-on-top', flag),
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.invoke('set-ignore-mouse', ignore),
   getScreenInfo: () => ipcRenderer.invoke('get-screen-info'),
+  
+  // Settings-related window options
+  setLaunchAtStartup: (enabled: boolean) => ipcRenderer.invoke('set-launch-at-startup', enabled),
+  setShowInDock: (show: boolean) => ipcRenderer.invoke('set-show-in-dock', show),
+  setWindowOpacity: (opacity: number) => ipcRenderer.invoke('set-window-opacity', opacity),
+  setHideFromScreenCapture: (hide: boolean) => ipcRenderer.invoke('set-hide-from-screen-capture', hide),
+  setIslandPosition: (position: string) => ipcRenderer.invoke('set-island-position', position),
+  setHotkey: (action: string, keys: string) => ipcRenderer.invoke('set-hotkey', action, keys),
   
   // Mouse enter/leave island (for click-through behavior)
   mouseEnterIsland: () => ipcRenderer.send('mouse-enter-island'),

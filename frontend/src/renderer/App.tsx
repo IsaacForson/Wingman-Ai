@@ -26,6 +26,18 @@ function App() {
   
   const { connect, disconnect } = useWebSocket()
 
+  // Handle click-through when modals are open
+  // When any modal is open, we need to disable click-through so user can interact
+  useEffect(() => {
+    const hasModalOpen = isSettingsOpen || isCommandPaletteOpen || isHistoryOpen
+    
+    if (window.wingman?.setIgnoreMouse) {
+      // When modal is open, don't ignore mouse events (allow clicks)
+      // When modal is closed, ignore mouse events (click-through)
+      window.wingman.setIgnoreMouse(!hasModalOpen)
+    }
+  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen])
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

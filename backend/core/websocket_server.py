@@ -156,6 +156,73 @@ class WebSocketManager:
         async def ping(sid, data=None):
             """Handle ping for latency measurement"""
             await self.sio.emit("pong", {"timestamp": datetime.now().isoformat()}, room=sid)
+        
+        @self.sio.event
+        async def sync_settings(sid, data):
+            """Sync settings from frontend"""
+            logger.info(f"Settings sync from {sid}")
+            from main import engine
+            if engine and engine._ai_module:
+                generator = engine._ai_module.answer_generator
+                
+                # Update AI provider and model
+                if data.get("aiProvider"):
+                    generator.set_provider(data["aiProvider"])
+                if data.get("aiModel"):
+                    generator.default_model = data["aiModel"]
+                if data.get("temperature"):
+                    from config import settings
+                    settings.temperature = data["temperature"]
+                if data.get("maxTokens"):
+                    from config import settings
+                    settings.max_tokens = data["maxTokens"]
+                    
+            await self.sio.emit("settings_synced", {"success": True}, room=sid)
+        
+        @self.sio.event
+        async def set_temperature(sid, data):
+            """Set AI temperature"""
+            temp = data.get("temperature", 0.7)
+            from config import settings
+            settings.temperature = temp
+            logger.info(f"Temperature set to {temp}")
+        
+        @self.sio.event
+        async def set_max_tokens(sid, data):
+            """Set max tokens"""
+            tokens = data.get("maxTokens", 2048)
+            from config import settings
+            settings.max_tokens = tokens
+            logger.info(f"Max tokens set to {tokens}")
+        
+        @self.sio.event
+        async def set_api_key(sid, data):
+            """Set API key for a provider"""
+            provider = data.get("provider")
+            key = data.get("key")
+            if provider and key:
+                from config import settings
+                if provider == "groq":
+                    settings.groq_api_key = key
+                elif provider == "openai":
+                    settings.openai_api_key = key
+                elif provider == "anthropic":
+                    settings.anthropic_api_key = key
+                elif provider == "google":
+                    settings.google_api_key = key
+                elif provider == "together":
+                    settings.together_api_key = key
+                elif provider == "huggingface":
+                    settings.huggingface_api_key = key
+                logger.info(f"API key updated for {provider}")
+        
+        @self.sio.event
+        async def set_ollama_url(sid, data):
+            """Set Ollama base URL"""
+            url = data.get("url", "http://localhost:11434")
+            from config import settings
+            settings.ollama_base_url = url
+            logger.info(f"Ollama URL set to {url}")
     
     def _setup_event_forwarding(self):
         """Forward internal events to connected clients"""

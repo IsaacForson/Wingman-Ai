@@ -5,12 +5,18 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/appStore";
-import { Loader2, ChevronDown, MessageSquare, Sparkles, Mic, MicOff } from "lucide-react";
+import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings } from "lucide-react";
 import socketService from "../../services/socket";
 
 const NormalState = () => {
-  const { isProcessing, isListening, currentQuestion, currentAnswer, setIslandState } =
-    useAppStore();
+  const { 
+    isProcessing, 
+    isListening, 
+    currentQuestion, 
+    currentAnswer, 
+    setIslandState,
+    setSettingsOpen 
+  } = useAppStore();
 
   const hasContent = currentQuestion || currentAnswer;
 
@@ -22,6 +28,11 @@ const NormalState = () => {
     } else {
       socketService.startAudio();
     }
+  };
+
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSettingsOpen(true);
   };
 
   return (
@@ -97,16 +108,27 @@ const NormalState = () => {
         )}
       </div>
 
-      {/* Right: Expand indicator */}
-      {hasContent && (
-        <motion.div
-          className="flex-shrink-0"
-          animate={{ y: [0, 2, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
+      {/* Right: Settings + Expand */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Settings button */}
+        <button
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"
+          onClick={handleSettingsClick}
+          title="Settings (⌘+,)"
         >
-          <ChevronDown className="w-4 h-4 text-white/40" />
-        </motion.div>
-      )}
+          <Settings className="w-3.5 h-3.5 text-white/50 hover:text-white/80" />
+        </button>
+        
+        {/* Expand indicator */}
+        {hasContent && (
+          <motion.div
+            animate={{ y: [0, 2, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          >
+            <ChevronDown className="w-4 h-4 text-white/40" />
+          </motion.div>
+        )}
+      </div>
     </motion.div>
   );
 };

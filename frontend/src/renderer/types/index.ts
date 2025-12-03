@@ -2,32 +2,8 @@
  * Wingman AI - TypeScript Type Definitions
  */
 
-// Window API from preload
-export interface WingmanAPI {
-  resizeWindow: (state: 'nano' | 'mini' | 'normal' | 'expanded' | 'fullscreen') => Promise<void>
-  getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
-  moveWindow: (x: number, y: number) => Promise<void>
-  setAlwaysOnTop: (flag: boolean) => Promise<void>
-  setIgnoreMouse: (ignore: boolean) => Promise<void>
-  getScreenInfo: () => Promise<{ width: number; height: number; scaleFactor: number }>
-  mouseEnterIsland: () => void
-  mouseLeaveIsland: () => void
-  onSetMode: (callback: (mode: string) => void) => () => void
-  onTogglePause: (callback: () => void) => () => void
-  onCaptureScreen: (callback: () => void) => () => void
-  onOpenSettings: (callback: () => void) => () => void
-  onOpenCommandPalette: (callback: () => void) => () => void
-  onEmergencyHide: (callback: () => void) => () => void
-  platform: string
-  version: string
-}
-
-// Extend Window interface
-declare global {
-  interface Window {
-    wingman: WingmanAPI
-  }
-}
+// WingmanAPI is defined in preload.ts and exposed via contextBridge
+// The Window interface extension is also in preload.ts, so we don't redeclare here
 
 // Island states
 export type IslandState = 'nano' | 'mini' | 'normal' | 'expanded' | 'fullscreen'

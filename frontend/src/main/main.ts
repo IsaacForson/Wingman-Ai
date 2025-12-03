@@ -240,8 +240,14 @@ function setupIPC(): void {
     mainWindow?.setAlwaysOnTop(flag)
   })
 
-  // Set click-through - called when mouse enters/leaves the island
+  // Track if a modal is open (settings, command palette, etc.)
+  // When a modal is open, we should NOT enable click-through
+  let isModalOpen = false
+
+  // Set click-through - called when modals open/close
   ipcMain.handle('set-ignore-mouse', (_, ignore: boolean) => {
+    // If ignore is false, a modal is open
+    isModalOpen = !ignore
     mainWindow?.setIgnoreMouseEvents(ignore, { forward: true })
   })
 
@@ -250,9 +256,11 @@ function setupIPC(): void {
     mainWindow?.setIgnoreMouseEvents(false)
   })
 
-  // Mouse left the island - enable click-through
+  // Mouse left the island - enable click-through (but NOT if modal is open)
   ipcMain.on('mouse-leave-island', () => {
-    mainWindow?.setIgnoreMouseEvents(true, { forward: true })
+    if (!isModalOpen) {
+      mainWindow?.setIgnoreMouseEvents(true, { forward: true })
+    }
   })
 
   // Get screen info
@@ -263,6 +271,59 @@ function setupIPC(): void {
       height: primaryDisplay.workAreaSize.height,
       scaleFactor: primaryDisplay.scaleFactor
     }
+  })
+
+  // Settings-related IPC handlers
+  
+  // Launch at startup
+  ipcMain.handle('set-launch-at-startup', (_, enabled: boolean) => {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: true // Start minimized to tray
+    })
+    console.log(`Launch at startup: ${enabled}`)
+  })
+
+  // Show/hide in dock (macOS)
+  ipcMain.handle('set-show-in-dock', (_, show: boolean) => {
+    if (process.platform === 'darwin') {
+      if (show) {
+        app.dock?.show()
+      } else {
+        app.dock?.hide()
+      }
+    }
+    console.log(`Show in dock: ${show}`)
+  })
+
+  // Window opacity
+  ipcMain.handle('set-window-opacity', (_, opacity: number) => {
+    if (mainWindow) {
+      mainWindow.setOpacity(Math.max(0.5, Math.min(1, opacity)))
+    }
+    console.log(`Window opacity: ${opacity}`)
+  })
+
+  // Hide from screen capture (screen share protection)
+  ipcMain.handle('set-hide-from-screen-capture', (_, hide: boolean) => {
+    if (mainWindow && process.platform === 'darwin') {
+      mainWindow.setContentProtection(hide)
+    }
+    console.log(`Hide from screen capture: ${hide}`)
+  })
+
+  // Island position (for future use - currently handled by drag)
+  ipcMain.handle('set-island-position', (_, position: string) => {
+    console.log(`Island position set to: ${position}`)
+    // Position is currently handled by drag in the renderer
+    // This could be used to set a default position on startup
+  })
+
+  // Hotkey customization (for future use)
+  ipcMain.handle('set-hotkey', (_, action: string, keys: string) => {
+    console.log(`Hotkey for ${action}: ${keys}`)
+    // Hotkey customization to be implemented in future
+    // Would require unregistering old shortcut and registering new one
   })
 }
 

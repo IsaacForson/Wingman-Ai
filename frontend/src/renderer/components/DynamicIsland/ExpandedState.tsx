@@ -17,7 +17,8 @@ import {
   RotateCcw,
   Settings,
   Mic,
-  MicOff
+  MicOff,
+  Zap
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
@@ -34,11 +35,12 @@ const ExpandedState = () => {
     isListening,
     aiProvider,
     setCurrentAnswer,
-    setProcessing
+    setProcessing,
+    setSettingsOpen
   } = useAppStore()
   
   const [copied, setCopied] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showAISelector, setShowAISelector] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // No auto-scroll - let user read from top
@@ -120,8 +122,19 @@ const ExpandedState = () => {
         </div>
         
         <div className="flex items-center gap-1">
-          <ActionButton onClick={() => setShowSettings(!showSettings)}>
-            <Settings className={`w-3.5 h-3.5 ${showSettings ? 'text-wingman-400' : ''}`} />
+          {/* Quick AI Provider Toggle */}
+          <ActionButton 
+            onClick={() => setShowAISelector(!showAISelector)}
+            title="Switch AI Model"
+          >
+            <Zap className={`w-3.5 h-3.5 ${showAISelector ? 'text-wingman-400' : ''}`} />
+          </ActionButton>
+          {/* Full Settings Panel */}
+          <ActionButton 
+            onClick={() => setSettingsOpen(true)}
+            title="Open Settings (⌘+,)"
+          >
+            <Settings className="w-3.5 h-3.5" />
           </ActionButton>
           <ActionButton onClick={toggleFullscreen}>
             {islandState === 'fullscreen' ? (
@@ -136,8 +149,8 @@ const ExpandedState = () => {
         </div>
       </div>
 
-      {/* Settings Panel */}
-      {showSettings && (
+      {/* Quick AI Selector */}
+      {showAISelector && (
         <motion.div
           className="mb-3 pb-3 border-b border-white/10"
           initial={{ opacity: 0, height: 0 }}
@@ -338,11 +351,13 @@ const ExpandedState = () => {
 const ActionButton = ({ 
   children, 
   onClick, 
-  className = '' 
+  className = '',
+  title
 }: { 
   children: React.ReactNode
   onClick?: () => void
-  className?: string 
+  className?: string
+  title?: string
 }) => (
   <button
     className={`
@@ -356,6 +371,7 @@ const ActionButton = ({
       e.stopPropagation() // Prevent drag from triggering
       onClick?.()
     }}
+    title={title}
   >
     {children}
   </button>
