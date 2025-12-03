@@ -47,24 +47,24 @@ const DynamicIsland = () => {
         damping: 30
       }}
     >
-      {/* Main Island Container */}
+      {/* Main Island Container - Draggable */}
       <motion.div
         className={`
-          relative w-full h-full rounded-[22px] overflow-hidden
+          relative w-full h-full rounded-[22px]
           bg-black/85 backdrop-blur-xl
           border border-white/10
-          shadow-island
+          shadow-island cursor-move
           ${isConnected ? 'shadow-island-glow' : ''}
           ${isPaused ? 'opacity-60' : ''}
         `}
+        style={{ overflow: islandState === 'expanded' || islandState === 'fullscreen' ? 'hidden' : 'visible' }}
         variants={islandVariants}
         initial="initial"
         animate="animate"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        drag={islandState === 'nano' || islandState === 'mini'}
+        drag
         dragMomentum={false}
-        dragElastic={0.1}
+        dragElastic={0.05}
+        dragConstraints={{ left: -500, right: 500, top: -50, bottom: 500 }}
       >
         {/* Glow effect */}
         <motion.div

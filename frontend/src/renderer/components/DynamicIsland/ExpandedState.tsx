@@ -20,6 +20,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
+import socketService from '../../services/socket'
 
 const ExpandedState = () => {
   const { 
@@ -28,7 +29,9 @@ const ExpandedState = () => {
     islandState,
     setIslandState,
     isProcessing,
-    aiProvider
+    aiProvider,
+    setCurrentAnswer,
+    setProcessing
   } = useAppStore()
   
   const [copied, setCopied] = useState(false)
@@ -52,17 +55,41 @@ const ExpandedState = () => {
   }
 
   const handleClose = () => {
-    setIslandState('mini')
+    // Clear current Q&A and go to normal state (click to listen)
+    setCurrentAnswer(null)
+    useAppStore.getState().setCurrentQuestion(null)
+    setIslandState('normal')
   }
 
   const toggleFullscreen = () => {
     setIslandState(islandState === 'fullscreen' ? 'expanded' : 'fullscreen')
   }
 
+  const handleRegenerate = () => {
+    if (!currentQuestion) {
+      toast.error('No question to regenerate')
+      return
+    }
+    
+    // Clear current answer and regenerate
+    setCurrentAnswer({
+      id: currentAnswer?.id || '',
+      question: currentQuestion,
+      answer: '',
+      isStreaming: true,
+      timestamp: new Date(),
+      source: currentAnswer?.source || 'audio'
+    })
+    setProcessing(true)
+    
+    // Emit regenerate request
+    socketService.submitQuestion(currentQuestion)
+    toast.success('Regenerating answer...')
+  }
+
   return (
     <motion.div 
-      className="w-full flex flex-col p-4"
-      style={{ height: '100%', minHeight: '300px' }}
+      className="w-full h-full flex flex-col p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -128,10 +155,10 @@ const ExpandedState = () => {
       {/* Answer Content - Scrollable container */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto min-h-0"
+        className="flex-1 min-h-0 pr-1"
         style={{ 
           overflowY: 'auto',
-          WebkitOverflowScrolling: 'touch'
+          maxHeight: 'calc(100% - 120px)'
         }}
       >
         {currentAnswer?.answer ? (
@@ -246,12 +273,7 @@ const ExpandedState = () => {
 
       {/* Footer Actions */}
       {currentAnswer?.answer && !currentAnswer.isStreaming && (
-        <motion.div 
-          className="flex items-center justify-between mt-3 pt-3 border-t border-white/10 flex-shrink-0"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/10 flex-shrink-0">
           <div className="flex items-center gap-1">
             <ActionButton onClick={() => toast('Feedback saved!', { icon: '👍' })}>
               <ThumbsUp className="w-3.5 h-3.5" />
@@ -259,8 +281,9 @@ const ExpandedState = () => {
             <ActionButton onClick={() => toast('Feedback saved!', { icon: '👎' })}>
               <ThumbsDown className="w-3.5 h-3.5" />
             </ActionButton>
-            <ActionButton onClick={() => toast.success('Regenerating...')}>
+            <ActionButton onClick={handleRegenerate} className="px-2 gap-1">
               <RotateCcw className="w-3.5 h-3.5" />
+              <span className="text-xs">Regenerate</span>
             </ActionButton>
           </div>
           
@@ -277,13 +300,13 @@ const ExpandedState = () => {
               </>
             )}
           </ActionButton>
-        </motion.div>
+        </div>
       )}
     </motion.div>
   )
 }
 
-// Reusable action button
+// Reusable action button - no scale animations for reliable clicking
 const ActionButton = ({ 
   children, 
   onClick, 
@@ -293,20 +316,21 @@ const ActionButton = ({
   onClick?: () => void
   className?: string 
 }) => (
-  <motion.button
+  <button
     className={`
-      flex items-center justify-center p-1.5 rounded-lg
-      bg-white/5 hover:bg-white/10 
+      flex items-center justify-center p-2 rounded-lg
+      bg-white/5 hover:bg-white/15 active:bg-white/20
       text-white/60 hover:text-white
-      transition-colors
+      transition-colors cursor-pointer
       ${className}
     `}
-    onClick={onClick}
-    whileHover={{ scale: 1.05 }}
-    whileTap={{ scale: 0.95 }}
+    onClick={(e) => {
+      e.stopPropagation() // Prevent drag from triggering
+      onClick?.()
+    }}
   >
     {children}
-  </motion.button>
+  </button>
 )
 
 export default ExpandedState

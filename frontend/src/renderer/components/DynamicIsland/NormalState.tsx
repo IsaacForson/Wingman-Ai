@@ -29,16 +29,14 @@ const NormalState = () => {
       className="w-full h-full flex items-center px-4 cursor-pointer"
       onClick={() => setIslandState("expanded")}
     >
-      {/* Left: Mic Button */}
-      <motion.button
+      {/* Left: Mic Button - No scale animations for reliable clicking */}
+      <button
         className={`
           w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
           ${isListening ? "bg-red-500/30" : isProcessing ? "bg-wingman-500/30" : "bg-white/10"}
-          hover:bg-white/20 transition-colors
+          hover:bg-white/20 active:bg-white/30 transition-colors
         `}
         onClick={handleMicClick}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
       >
         {isProcessing ? (
           <motion.div
@@ -59,7 +57,7 @@ const NormalState = () => {
         ) : (
           <MicOff className="w-4 h-4 text-white/60" />
         )}
-      </motion.button>
+      </button>
 
       {/* Center: Content */}
       <div className="flex-1 mx-3 overflow-hidden">
