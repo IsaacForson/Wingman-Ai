@@ -97,9 +97,11 @@ function App() {
   }, [connect, disconnect, setMode, togglePause, setPaused])
 
   return (
-    <div className="w-full h-full flex items-start justify-center pt-0">
-      {/* Main Dynamic Island */}
-      <DynamicIsland />
+    <div className="w-screen h-screen relative overflow-visible">
+      {/* Main Dynamic Island - Positioned absolutely for free dragging */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+        <DynamicIsland />
+      </div>
       
       {/* Global Overlays */}
       <SettingsPanel 
