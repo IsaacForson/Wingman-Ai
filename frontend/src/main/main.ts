@@ -64,11 +64,15 @@ function createWindow(): void {
   // This allows clicks to pass through to desktop, except on the island
   mainWindow.setIgnoreMouseEvents(true, { forward: true })
 
-  // Set window level to be above screen recording (macOS)
+  // Set window level to be above everything including fullscreen apps (macOS)
   if (process.platform === 'darwin') {
     mainWindow.setWindowButtonVisibility(false)
     // Set window to be excluded from screen capture
     mainWindow.setContentProtection(true)
+    // Make visible on all Spaces including fullscreen apps
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    // Use 'screen-saver' level to stay above fullscreen apps
+    mainWindow.setAlwaysOnTop(true, 'screen-saver')
   }
 
   // Load the app
@@ -237,7 +241,16 @@ function setupIPC(): void {
 
   // Set always on top
   ipcMain.handle('set-always-on-top', (_, flag: boolean) => {
-    mainWindow?.setAlwaysOnTop(flag)
+    if (flag && process.platform === 'darwin') {
+      // Use 'screen-saver' level to stay above fullscreen apps on macOS
+      mainWindow?.setAlwaysOnTop(true, 'screen-saver')
+      mainWindow?.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    } else {
+      mainWindow?.setAlwaysOnTop(flag)
+      if (!flag && process.platform === 'darwin') {
+        mainWindow?.setVisibleOnAllWorkspaces(false)
+      }
+    }
   })
 
   // Track if a modal is open (settings, command palette, etc.)
