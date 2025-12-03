@@ -63,8 +63,7 @@ const DynamicIsland = () => {
         animate="animate"
         drag
         dragMomentum={false}
-        dragElastic={0.05}
-        dragConstraints={{ left: -500, right: 500, top: -50, bottom: 500 }}
+        dragElastic={0}
       >
         {/* Glow effect */}
         <motion.div

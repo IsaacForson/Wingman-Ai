@@ -3,7 +3,7 @@
  * Full answer display with question context
  */
 
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../../store/appStore'
 import { 
@@ -15,7 +15,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCcw,
-  Settings
+  Settings,
+  Mic,
+  MicOff
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
@@ -29,6 +31,7 @@ const ExpandedState = () => {
     islandState,
     setIslandState,
     isProcessing,
+    isListening,
     aiProvider,
     setCurrentAnswer,
     setProcessing
@@ -38,12 +41,7 @@ const ExpandedState = () => {
   const [showSettings, setShowSettings] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll as new content arrives
-  useEffect(() => {
-    if (scrollRef.current && currentAnswer?.isStreaming) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [currentAnswer?.answer, currentAnswer?.isStreaming])
+  // No auto-scroll - let user read from top
 
   const handleCopy = () => {
     if (currentAnswer?.answer) {
@@ -85,6 +83,14 @@ const ExpandedState = () => {
     // Emit regenerate request
     socketService.submitQuestion(currentQuestion)
     toast.success('Regenerating answer...')
+  }
+
+  const handleMicClick = () => {
+    if (isListening) {
+      socketService.stopAudio()
+    } else {
+      socketService.startAudio()
+    }
   }
 
   return (
@@ -265,8 +271,30 @@ const ExpandedState = () => {
               {currentQuestion ? 'Processing your question...' : 'No question detected yet'}
             </div>
             <p className="text-white/20 text-xs max-w-[200px]">
-              Ask a question or click the mic button to start listening
+              {isListening ? 'Listening... speak now' : 'Click the mic button to start listening'}
             </p>
+            
+            {/* Mic Button */}
+            <button
+              onClick={handleMicClick}
+              className={`
+                w-14 h-14 rounded-full flex items-center justify-center
+                ${isListening ? 'bg-red-500/30 hover:bg-red-500/40' : 'bg-white/10 hover:bg-white/20'}
+                active:bg-white/30 transition-all
+              `}
+            >
+              {isListening ? (
+                <Mic className="w-6 h-6 text-red-400" />
+              ) : (
+                <MicOff className="w-6 h-6 text-white/60" />
+              )}
+            </button>
+            
+            {isListening && (
+              <p className="text-wingman-400 text-xs animate-pulse">
+                Recording... click again to stop
+              </p>
+            )}
           </div>
         )}
       </div>
