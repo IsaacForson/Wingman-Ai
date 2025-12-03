@@ -64,6 +64,8 @@ const DynamicIsland = () => {
         drag
         dragMomentum={false}
         dragElastic={0}
+        onMouseEnter={() => window.wingman?.mouseEnterIsland()}
+        onMouseLeave={() => window.wingman?.mouseLeaveIsland()}
       >
         {/* Glow effect */}
         <motion.div

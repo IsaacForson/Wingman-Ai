@@ -14,6 +14,10 @@ export interface WingmanAPI {
   setAlwaysOnTop: (flag: boolean) => Promise<void>
   setIgnoreMouse: (ignore: boolean) => Promise<void>
   getScreenInfo: () => Promise<{ width: number; height: number; scaleFactor: number }>
+  
+  // Mouse enter/leave island (for click-through)
+  mouseEnterIsland: () => void
+  mouseLeaveIsland: () => void
 
   // Event listeners
   onSetMode: (callback: (mode: string) => void) => () => void
@@ -37,6 +41,10 @@ contextBridge.exposeInMainWorld('wingman', {
   setAlwaysOnTop: (flag: boolean) => ipcRenderer.invoke('set-always-on-top', flag),
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.invoke('set-ignore-mouse', ignore),
   getScreenInfo: () => ipcRenderer.invoke('get-screen-info'),
+  
+  // Mouse enter/leave island (for click-through behavior)
+  mouseEnterIsland: () => ipcRenderer.send('mouse-enter-island'),
+  mouseLeaveIsland: () => ipcRenderer.send('mouse-leave-island'),
 
   // Event listeners
   onSetMode: (callback: (mode: string) => void) => {

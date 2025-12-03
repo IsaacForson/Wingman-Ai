@@ -10,6 +10,8 @@ export interface WingmanAPI {
   setAlwaysOnTop: (flag: boolean) => Promise<void>
   setIgnoreMouse: (ignore: boolean) => Promise<void>
   getScreenInfo: () => Promise<{ width: number; height: number; scaleFactor: number }>
+  mouseEnterIsland: () => void
+  mouseLeaveIsland: () => void
   onSetMode: (callback: (mode: string) => void) => () => void
   onTogglePause: (callback: () => void) => () => void
   onCaptureScreen: (callback: () => void) => () => void

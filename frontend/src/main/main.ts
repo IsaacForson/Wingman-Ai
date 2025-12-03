@@ -37,21 +37,21 @@ const WINDOW_CONFIG = {
 }
 
 function createWindow(): void {
-  const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
 
+  // Create a FULLSCREEN transparent window so island can be dragged anywhere
   mainWindow = new BrowserWindow({
-    width: WINDOW_CONFIG.normal.width,
-    height: WINDOW_CONFIG.normal.height,
-    x: Math.floor(screenWidth / 2 - WINDOW_CONFIG.normal.width / 2),
-    y: 20,
+    width: screenWidth,
+    height: screenHeight,
+    x: 0,
+    y: 0,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
+    backgroundColor: '#00000000', // Fully transparent
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -60,8 +60,9 @@ function createWindow(): void {
     }
   })
 
-  // Make window click-through when not focused (for screen share protection)
-  mainWindow.setIgnoreMouseEvents(false)
+  // Make window click-through by default, but forward mouse events
+  // This allows clicks to pass through to desktop, except on the island
+  mainWindow.setIgnoreMouseEvents(true, { forward: true })
 
   // Set window level to be above screen recording (macOS)
   if (process.platform === 'darwin') {
@@ -218,22 +219,10 @@ function registerGlobalShortcuts(): void {
 }
 
 function setupIPC(): void {
-  // Window size changes
-  ipcMain.handle('resize-window', (_, state: keyof typeof WINDOW_CONFIG) => {
-    if (mainWindow && WINDOW_CONFIG[state]) {
-      const { width, height } = WINDOW_CONFIG[state]
-      const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize
-      
-      // Keep centered horizontally
-      const newX = Math.floor(screenWidth / 2 - width / 2)
-      
-      mainWindow.setBounds({
-        x: newX,
-        y: 20,
-        width,
-        height
-      }, true) // Animate
-    }
+  // Window size changes - no longer needed since window is fullscreen
+  // The Dynamic Island handles its own size changes
+  ipcMain.handle('resize-window', () => {
+    // No-op: window stays fullscreen, island resizes itself
   })
 
   // Get current window state
@@ -251,9 +240,19 @@ function setupIPC(): void {
     mainWindow?.setAlwaysOnTop(flag)
   })
 
-  // Set click-through
+  // Set click-through - called when mouse enters/leaves the island
   ipcMain.handle('set-ignore-mouse', (_, ignore: boolean) => {
     mainWindow?.setIgnoreMouseEvents(ignore, { forward: true })
+  })
+
+  // Mouse entered the island - enable interaction
+  ipcMain.on('mouse-enter-island', () => {
+    mainWindow?.setIgnoreMouseEvents(false)
+  })
+
+  // Mouse left the island - enable click-through
+  ipcMain.on('mouse-leave-island', () => {
+    mainWindow?.setIgnoreMouseEvents(true, { forward: true })
   })
 
   // Get screen info
