@@ -131,8 +131,8 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Island state
-  islandState: 'nano',
+  // Island state - Start with 'normal' so it's visible
+  islandState: 'normal',
   setIslandState: (state) => {
     set({ islandState: state })
     // Also resize the Electron window

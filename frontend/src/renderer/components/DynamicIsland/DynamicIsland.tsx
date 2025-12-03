@@ -23,9 +23,9 @@ const DynamicIsland = () => {
       case 'normal':
         return { width: 420, height: 64 }
       case 'expanded':
-        return { width: 600, height: 'auto', minHeight: 120, maxHeight: 400 }
+        return { width: 600, height: 400 }
       case 'fullscreen':
-        return { width: 900, height: 'auto', minHeight: 200, maxHeight: '80vh' }
+        return { width: 900, height: 600 }
       default:
         return { width: 60, height: 40 }
     }
@@ -39,9 +39,7 @@ const DynamicIsland = () => {
       initial={false}
       animate={{
         width: size.width,
-        height: typeof size.height === 'number' ? size.height : 'auto',
-        minHeight: size.minHeight,
-        maxHeight: size.maxHeight
+        height: size.height
       }}
       transition={{
         type: 'spring',

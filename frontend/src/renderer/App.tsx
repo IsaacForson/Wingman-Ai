@@ -2,26 +2,16 @@
  * Wingman AI - Main App Component
  */
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { Toaster } from "react-hot-toast"
 import DynamicIsland from "./components/DynamicIsland/DynamicIsland"
 import { SettingsPanel } from "./components/Settings"
 import { CommandPalette } from "./components/CommandPalette"
 import { HistoryView } from "./components/History"
-import { ErrorBoundary } from "./components/ErrorBoundary"
-import { NotificationSystem } from "./components/Notifications"
-import { OnboardingFlow } from "./components/Onboarding"
-import { AnalyticsDashboard } from "./components/Analytics"
-import { PracticeModeUI } from "./components/Practice"
-import { MeetingHUD } from "./components/Meeting"
-import { FocusTimer, BreathingExercise, WellnessPanel } from "./components/Focus"
-import { AchievementsPanel } from "./components/Achievements"
-import { PerformanceMonitor } from "./components/Performance"
-import { TipsProvider, TipButton } from "./components/Tips"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 
-function AppContent() {
+function App() {
   const { 
     setMode, 
     togglePause, 
@@ -32,28 +22,8 @@ function AppContent() {
     setCommandPaletteOpen,
     isHistoryOpen,
     setHistoryOpen,
-    isAnalyticsOpen,
-    setAnalyticsOpen,
-    isPracticeOpen,
-    setPracticeOpen,
-    isMeetingOpen,
-    setMeetingOpen,
-    isFocusTimerOpen,
-    setFocusTimerOpen,
-    isBreathingOpen,
-    setBreathingOpen,
-    isWellnessOpen,
-    setWellnessOpen,
-    isAchievementsOpen,
-    setAchievementsOpen,
-    isPerformanceOpen,
-    setPerformanceOpen
   } = useAppStore()
   
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    // Check if first time user
-    return localStorage.getItem('wingman_onboarded') !== 'true'
-  })
   const { connect, disconnect } = useWebSocket()
 
   // Global keyboard shortcuts
@@ -95,11 +65,6 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, setSettingsOpen, setCommandPaletteOpen, setHistoryOpen, togglePause])
 
-  const handleOnboardingComplete = () => {
-    localStorage.setItem('wingman_onboarded', 'true')
-    setShowOnboarding(false)
-  }
-
   useEffect(() => {
     // Connect to backend
     connect()
@@ -131,16 +96,6 @@ function AppContent() {
     }
   }, [connect, disconnect, setMode, togglePause, setPaused])
 
-  // Show onboarding for first-time users
-  if (showOnboarding) {
-    return (
-      <OnboardingFlow 
-        onComplete={handleOnboardingComplete}
-        onSkip={handleOnboardingComplete}
-      />
-    )
-  }
-
   return (
     <div className="w-full h-full flex items-start justify-center pt-0">
       {/* Main Dynamic Island */}
@@ -162,69 +117,7 @@ function AppContent() {
         onClose={() => setHistoryOpen(false)}
       />
       
-      {/* Analytics Dashboard */}
-      <AnalyticsDashboard
-        isOpen={isAnalyticsOpen}
-        onClose={() => setAnalyticsOpen(false)}
-      />
-      
-      {/* Practice Mode */}
-      <PracticeModeUI
-        isOpen={isPracticeOpen}
-        onClose={() => setPracticeOpen(false)}
-      />
-      
-      {/* Meeting HUD */}
-      <MeetingHUD
-        isOpen={isMeetingOpen}
-        onClose={() => setMeetingOpen(false)}
-      />
-      
-      {/* Focus Timer */}
-      <FocusTimer
-        isOpen={isFocusTimerOpen}
-        onClose={() => setFocusTimerOpen(false)}
-      />
-      
-      {/* Breathing Exercise */}
-      <BreathingExercise
-        isOpen={isBreathingOpen}
-        onClose={() => setBreathingOpen(false)}
-      />
-      
-      {/* Wellness Panel */}
-      <WellnessPanel
-        isOpen={isWellnessOpen}
-        onClose={() => setWellnessOpen(false)}
-        onOpenFocusTimer={() => {
-          setWellnessOpen(false)
-          setFocusTimerOpen(true)
-        }}
-        onOpenBreathing={() => {
-          setWellnessOpen(false)
-          setBreathingOpen(true)
-        }}
-      />
-      
-      {/* Achievements */}
-      <AchievementsPanel
-        isOpen={isAchievementsOpen}
-        onClose={() => setAchievementsOpen(false)}
-      />
-      
-      {/* Performance Monitor */}
-      <PerformanceMonitor
-        isOpen={isPerformanceOpen}
-        onClose={() => setPerformanceOpen(false)}
-      />
-      
-      {/* Tip Button */}
-      <TipButton />
-      
-      {/* Notification System */}
-      <NotificationSystem position="top-right" />
-      
-      {/* Toast Notifications (legacy) */}
+      {/* Toast Notifications */}
       <Toaster
         position="bottom-center"
         toastOptions={{
@@ -239,17 +132,6 @@ function AppContent() {
         }}
       />
     </div>
-  )
-}
-
-// Wrap with Error Boundary and Tips Provider
-function App() {
-  return (
-    <ErrorBoundary>
-      <TipsProvider>
-        <AppContent />
-      </TipsProvider>
-    </ErrorBoundary>
   )
 }
 

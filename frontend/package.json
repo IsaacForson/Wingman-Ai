@@ -80,9 +80,11 @@
         "from": "../backend",
         "to": "backend",
         "filter": [
-          "**/*",
-          "!venv/**/*",
-          "!__pycache__/**/*",
+          "**/*.py",
+          "requirements.txt",
+          "env.example.txt",
+          "!venv/**",
+          "!__pycache__/**",
           "!*.pyc",
           "!.env"
         ]

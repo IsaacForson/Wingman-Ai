@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     host: str = Field(default="127.0.0.1", env="HOST")
     port: int = Field(default=8765, env="PORT")
     websocket_path: str = "/ws"
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: list[str] = ["*"]  # Allow all origins for Electron file:// protocol
     
     # AI Providers - API Keys
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")

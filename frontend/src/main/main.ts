@@ -281,25 +281,72 @@ async function startBackend(): Promise<boolean> {
       // Backend not running, start it
       console.log('🚀 Starting backend...')
       
-      const backendPath = path.join(app.getAppPath(), '..', 'backend')
-      const pythonPath = process.platform === 'win32' ? 'python' : 'python3'
+      // Look for backend executable or Python script
+      const resourcesPath = process.resourcesPath || path.join(app.getAppPath(), '..')
+      const appPath = app.getAppPath()
       
-      // Try to find venv python first
-      const venvPython = path.join(backendPath, 'venv', 'bin', 'python')
-      const venvPythonWin = path.join(backendPath, 'venv', 'Scripts', 'python.exe')
+      // Possible locations for bundled backend executable
+      const bundledPaths = [
+        // Production: resources/backend/
+        path.join(resourcesPath, 'backend', 'wingman-backend'),
+        path.join(resourcesPath, 'backend', 'wingman-backend.app', 'Contents', 'MacOS', 'wingman-backend'),
+        // Development: ../../backend/dist/
+        path.join(appPath, '..', '..', 'backend', 'dist', 'wingman-backend'),
+        path.join(appPath, '..', 'backend', 'dist', 'wingman-backend'),
+      ]
       
-      let pythonExecutable = pythonPath
-      if (fs.existsSync(venvPython)) {
-        pythonExecutable = venvPython
-      } else if (fs.existsSync(venvPythonWin)) {
-        pythonExecutable = venvPythonWin
+      // Check for bundled executable first (for non-technical users)
+      let executablePath: string | null = null
+      for (const p of bundledPaths) {
+        if (fs.existsSync(p)) {
+          executablePath = p
+          console.log(`Found bundled backend at: ${p}`)
+          break
+        }
       }
+      
+      if (executablePath) {
+        // Launch bundled executable
+        console.log('🔧 Starting bundled backend executable...')
+        
+        // Create .env file in temp location if needed
+        const envPath = path.join(path.dirname(executablePath), '.env')
+        if (!fs.existsSync(envPath)) {
+          const envExample = path.join(path.dirname(executablePath), '.env.example')
+          if (fs.existsSync(envExample)) {
+            fs.copyFileSync(envExample, envPath)
+          }
+        }
+        
+        backendProcess = spawn(executablePath, [], {
+          cwd: path.dirname(executablePath),
+          env: { ...process.env },
+          stdio: ['pipe', 'pipe', 'pipe']
+        })
+      } else {
+        // Fallback: Try Python (for developers)
+        console.log('⚠️ No bundled backend found, trying Python...')
+        
+        const backendPath = path.join(appPath, '..', 'backend')
+        const pythonPath = process.platform === 'win32' ? 'python' : 'python3'
+        
+        // Try to find venv python first
+        const venvPython = path.join(backendPath, 'venv', 'bin', 'python')
+        const venvPythonWin = path.join(backendPath, 'venv', 'Scripts', 'python.exe')
+        
+        let pythonExecutable = pythonPath
+        if (fs.existsSync(venvPython)) {
+          pythonExecutable = venvPython
+        } else if (fs.existsSync(venvPythonWin)) {
+          pythonExecutable = venvPythonWin
+        }
 
-      backendProcess = spawn(pythonExecutable, ['main.py'], {
-        cwd: backendPath,
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
-        stdio: ['pipe', 'pipe', 'pipe']
-      })
+        backendProcess = spawn(pythonExecutable, ['main.py'], {
+          cwd: backendPath,
+          env: { ...process.env, PYTHONUNBUFFERED: '1' },
+          stdio: ['pipe', 'pipe', 'pipe']
+        })
+      }
 
       backendProcess.stdout?.on('data', (data) => {
         console.log(`[Backend] ${data.toString().trim()}`)

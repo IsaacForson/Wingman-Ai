@@ -189,8 +189,20 @@ class WingmanEngine:
         transcript = event.data.get("text", "")
         self._current_transcript = transcript
         
+        logger.info(f"Received transcript: {transcript[:100]}..." if len(transcript) > 100 else f"Received transcript: {transcript}")
+        
+        # Skip empty or very short transcripts
+        if len(transcript.strip()) < 5:
+            logger.debug("Transcript too short, skipping")
+            return
+        
         # Check if it contains a question
-        if self._ai_module and await self._ai_module.is_question(transcript):
+        is_question = self._ai_module and await self._ai_module.is_question(transcript)
+        logger.info(f"Is question: {is_question}")
+        
+        # For now, treat any substantial transcript as a question to respond to
+        # This makes the app more responsive for testing
+        if is_question or len(transcript.strip()) > 10:
             await event_bus.emit(EventType.QUESTION_DETECTED, {
                 "text": transcript,
                 "source": "audio"

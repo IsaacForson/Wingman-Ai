@@ -35,8 +35,14 @@ class Transcriber:
         """Initialize the transcriber"""
         if self.use_local:
             await self._init_local_model()
-        else:
+            logger.info("✅ Using LOCAL Whisper for transcription")
+        elif settings.openai_api_key:
             await self._init_openai_client()
+            logger.info("✅ Using OpenAI Whisper API for transcription")
+        elif settings.groq_api_key:
+            logger.info("✅ Using Groq Whisper API for transcription (free!)")
+        else:
+            logger.warning("⚠️ No transcription method configured! Audio will not be transcribed.")
     
     async def _init_local_model(self):
         """Initialize local Whisper model"""
@@ -96,12 +102,47 @@ class Transcriber:
                 return await self._transcribe_local(audio_data)
             elif self._openai_client:
                 return await self._transcribe_api(audio_data)
+            elif settings.groq_api_key:
+                # Use Groq's free Whisper API as fallback
+                return await self._transcribe_groq(audio_data)
             else:
-                logger.warning("No transcription method available")
+                logger.warning("No transcription method available - please configure an API key")
                 return None
                 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
+            return None
+    
+    async def _transcribe_groq(self, audio_data: bytes) -> Optional[str]:
+        """Transcribe using Groq's Whisper API (free!)"""
+        try:
+            from groq import Groq
+            
+            # Create WAV file in memory
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(settings.audio_sample_rate)
+                wav_file.writeframes(audio_data)
+            
+            wav_buffer.seek(0)
+            wav_buffer.name = "audio.wav"  # Groq needs a filename
+            
+            client = Groq(api_key=settings.groq_api_key)
+            
+            # Use Groq's Whisper model
+            transcription = client.audio.transcriptions.create(
+                model="whisper-large-v3",
+                file=wav_buffer,
+                language="en"
+            )
+            
+            logger.info(f"Groq transcription: {transcription.text[:100]}..." if len(transcription.text) > 100 else f"Groq transcription: {transcription.text}")
+            return transcription.text.strip()
+            
+        except Exception as e:
+            logger.error(f"Groq transcription failed: {e}")
             return None
     
     async def _transcribe_local(self, audio_data: bytes) -> Optional[str]:

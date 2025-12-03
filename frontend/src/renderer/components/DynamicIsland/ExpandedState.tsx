@@ -61,7 +61,8 @@ const ExpandedState = () => {
 
   return (
     <motion.div 
-      className="w-full h-full flex flex-col p-4"
+      className="w-full flex flex-col p-4"
+      style={{ height: '100%', minHeight: '300px' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -124,10 +125,14 @@ const ExpandedState = () => {
         </div>
       )}
 
-      {/* Answer Content */}
+      {/* Answer Content - Scrollable container */}
       <div 
         ref={scrollRef}
         className="flex-1 overflow-y-auto min-h-0"
+        style={{ 
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch'
+        }}
       >
         {currentAnswer?.answer ? (
           <div className="markdown-content text-sm text-white/90 pr-2">
@@ -216,7 +221,7 @@ const ExpandedState = () => {
               />
             )}
           </div>
-        ) : (
+        ) : isProcessing ? (
           <div className="flex items-center justify-center h-full">
             <motion.div
               className="flex items-center gap-2 text-white/40"
@@ -226,6 +231,15 @@ const ExpandedState = () => {
               <div className="w-4 h-4 border-2 border-wingman-500/30 border-t-wingman-500 rounded-full animate-spin" />
               <span className="text-sm">Generating answer...</span>
             </motion.div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+            <div className="text-white/30 text-sm">
+              {currentQuestion ? 'Processing your question...' : 'No question detected yet'}
+            </div>
+            <p className="text-white/20 text-xs max-w-[200px]">
+              Ask a question or click the mic button to start listening
+            </p>
           </div>
         )}
       </div>

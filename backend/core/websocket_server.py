@@ -17,7 +17,7 @@ from .event_bus import event_bus, EventType, Event
 # Create Socket.IO server
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=settings.cors_origins,
+    cors_allowed_origins='*',  # Allow all origins for Electron file:// protocol
     logger=False,
     engineio_logger=False
 )
@@ -58,27 +58,27 @@ class WebSocketManager:
             logger.info(f"Client disconnected: {sid}")
         
         @self.sio.event
-        async def start_audio(sid):
+        async def start_audio(sid, data=None):
             """Start audio capture"""
-            logger.debug(f"Start audio requested by {sid}")
+            logger.info(f"Start audio requested by {sid}")
             from main import engine
             if engine:
                 await engine.start_audio()
                 await self.sio.emit("audio_status", {"status": "started"}, room=sid)
         
         @self.sio.event
-        async def stop_audio(sid):
+        async def stop_audio(sid, data=None):
             """Stop audio capture"""
-            logger.debug(f"Stop audio requested by {sid}")
+            logger.info(f"Stop audio requested by {sid}")
             from main import engine
             if engine:
                 await engine.stop_audio()
                 await self.sio.emit("audio_status", {"status": "stopped"}, room=sid)
         
         @self.sio.event
-        async def capture_screen(sid):
+        async def capture_screen(sid, data=None):
             """Capture and analyze screen"""
-            logger.debug(f"Screen capture requested by {sid}")
+            logger.info(f"Screen capture requested by {sid}")
             from main import engine
             if engine:
                 result = await engine.capture_screen()
@@ -103,21 +103,21 @@ class WebSocketManager:
                 await engine.set_mode(mode)
         
         @self.sio.event
-        async def pause(sid):
+        async def pause(sid, data=None):
             """Pause processing"""
             from main import engine
             if engine:
                 await engine.pause()
         
         @self.sio.event
-        async def resume(sid):
+        async def resume(sid, data=None):
             """Resume processing"""
             from main import engine
             if engine:
                 await engine.resume()
         
         @self.sio.event
-        async def get_status(sid):
+        async def get_status(sid, data=None):
             """Get current status"""
             from main import engine
             if engine:
@@ -125,7 +125,7 @@ class WebSocketManager:
                 await self.sio.emit("status", status, room=sid)
         
         @self.sio.event
-        async def get_ai_providers(sid):
+        async def get_ai_providers(sid, data=None):
             """Get available AI providers"""
             from main import engine
             if engine and engine._ai_module:
@@ -153,7 +153,7 @@ class WebSocketManager:
                 }, room=sid)
         
         @self.sio.event
-        async def ping(sid):
+        async def ping(sid, data=None):
             """Handle ping for latency measurement"""
             await self.sio.emit("pong", {"timestamp": datetime.now().isoformat()}, room=sid)
     
@@ -221,7 +221,8 @@ def create_socket_app() -> socketio.ASGIApp:
     """Create and configure the Socket.IO ASGI application"""
     global ws_manager
     ws_manager = WebSocketManager(sio)
-    return socketio.ASGIApp(sio, socketio_path=settings.websocket_path)
+    # socketio_path is empty since we mount the app at /socket.io
+    return socketio.ASGIApp(sio, socketio_path="")
 
 
 def get_ws_manager() -> Optional[WebSocketManager]:

@@ -3,18 +3,13 @@
  * Manages real-time communication with the Python backend
  */
 
-
-import { useCallback, useRef } from 'react'
-import { io, Socket } from 'socket.io-client'
+import { useCallback, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
-
-const BACKEND_URL = 'http://localhost:8765'
+import socketService from '../services/socket'
 
 export function useWebSocket() {
-  const socketRef = useRef<Socket | null>(null)
-  
   const {
     setConnected,
     setListening,
@@ -33,14 +28,7 @@ export function useWebSocket() {
   } = useAppStore()
 
   const connect = useCallback(() => {
-    if (socketRef.current?.connected) return
-
-    const socket = io(BACKEND_URL, {
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    })
+    const socket = socketService.connect()
 
     socket.on('connect', () => {
       console.log('Connected to Wingman backend')
@@ -62,7 +50,7 @@ export function useWebSocket() {
     // System events
     socket.on('system_ready', (data: { data?: Record<string, unknown> }) => {
       console.log('System ready:', data)
-      setIslandState('nano')
+      setIslandState('normal')
     })
 
     socket.on('session_started', (data: { data?: { session_id?: string } }) => {
@@ -71,13 +59,26 @@ export function useWebSocket() {
 
     // Audio events
     socket.on('audio_started', () => {
+      console.log('[Socket] Audio started')
       setListening(true)
-      setIslandState('mini')
+      setIslandState('normal')
+      toast.success('Listening started')
     })
 
     socket.on('audio_stopped', () => {
+      console.log('[Socket] Audio stopped')
       setListening(false)
-      setIslandState('nano')
+      toast('Listening stopped', { icon: '🔇' })
+    })
+
+    socket.on('audio_status', (data: { status?: string }) => {
+      console.log('[Socket] Audio status:', data)
+      if (data.status === 'started') {
+        setListening(true)
+        toast.success('Listening started')
+      } else if (data.status === 'stopped') {
+        setListening(false)
+      }
     })
 
     // Transcript events
@@ -114,67 +115,79 @@ export function useWebSocket() {
         id: uuidv4(),
         question,
         answer: '',
-        isStreaming: true,
+        isStreaming: false,
         timestamp: new Date(),
         source: data.data?.source || 'audio'
       })
     })
 
-    // Answer events
+    // Answer events - debounced to prevent flickering
+    let isGenerating = false
+    
     socket.on('answer_generating', () => {
+      if (isGenerating) return // Prevent duplicate processing
+      isGenerating = true
+      
+      console.log('[Socket] Answer generating started')
       setProcessing(true)
-      setIslandState('normal')
+      setIslandState('expanded') // Show expanded view immediately
+      
+      const currentAnswer = useAppStore.getState().currentAnswer
+      if (currentAnswer && !currentAnswer.isStreaming) {
+        setCurrentAnswer({ ...currentAnswer, isStreaming: true })
+      }
     })
 
     socket.on('answer_chunk', (data: { data?: { chunk?: string } }) => {
       const chunk = data.data?.chunk || ''
-      appendToAnswer(chunk)
-      
-      // Expand if answer is getting long
-      const currentAnswer = useAppStore.getState().currentAnswer
-      if (currentAnswer && currentAnswer.answer.length > 200) {
-        setIslandState('expanded')
+      if (chunk) {
+        appendToAnswer(chunk)
       }
     })
 
     socket.on('answer_complete', (data: { data?: { answer?: string } }) => {
+      console.log('[Socket] Answer complete')
+      isGenerating = false
       setProcessing(false)
       
       const currentAnswer = useAppStore.getState().currentAnswer
       if (currentAnswer) {
-        const completedAnswer = {
+        const finalAnswer = {
           ...currentAnswer,
-          isStreaming: false,
-          answer: data.data?.answer || currentAnswer.answer
+          answer: data.data?.answer || currentAnswer.answer,
+          isStreaming: false
         }
-        setCurrentAnswer(completedAnswer)
-        addToHistory(completedAnswer)
+        setCurrentAnswer(finalAnswer)
+        addToHistory(finalAnswer)
         incrementAnswers()
       }
     })
 
     socket.on('answer_error', (data: { data?: { error?: string } }) => {
+      console.log('[Socket] Answer error:', data.data?.error)
+      isGenerating = false
       setProcessing(false)
-      toast.error(data.data?.error || 'Failed to generate answer')
-      setIslandState('mini')
+      
+      const error = data.data?.error || 'Failed to generate answer'
+      toast.error(error)
+      
+      const currentAnswer = useAppStore.getState().currentAnswer
+      if (currentAnswer) {
+        setCurrentAnswer({ ...currentAnswer, isStreaming: false })
+      }
     })
 
     // Screen events
-    socket.on('screen_text', (data: { data?: { type?: string } }) => {
-      console.log('Screen text detected:', data.data?.type)
+    socket.on('screen_text', (data: { data?: { text?: string } }) => {
+      console.log('Screen text detected:', data.data?.text?.slice(0, 100))
     })
 
-    socket.on('screen_code', (data: { data?: { blocks?: unknown[] } }) => {
-      console.log('Code detected:', data.data?.blocks?.length, 'blocks')
+    socket.on('screen_code', (data: { data?: { code?: string; language?: string } }) => {
+      console.log('Code detected:', data.data?.language)
     })
 
-    socket.on('screen_mcq', (data: { data?: { mcq?: unknown } }) => {
-      console.log('MCQ detected:', data.data?.mcq)
-    })
-
-    // Mode change
-    socket.on('mode_changed', (data: { data?: { new_mode?: string } }) => {
-      console.log('Mode changed:', data.data?.new_mode)
+    socket.on('screen_mcq', (data: { data?: { question?: string; options?: string[] } }) => {
+      console.log('MCQ detected:', data.data?.question)
     })
 
     // AI Provider events
@@ -195,9 +208,8 @@ export function useWebSocket() {
     })
 
     // Request AI providers on connect
-    socket.emit('get_ai_providers')
+    socketService.emit('get_ai_providers')
 
-    socketRef.current = socket
   }, [
     setConnected, setListening, setProcessing, setIslandState,
     addTranscriptLine, setCurrentAnswer, appendToAnswer,
@@ -206,48 +218,21 @@ export function useWebSocket() {
   ])
 
   const disconnect = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.disconnect()
-      socketRef.current = null
-    }
+    socketService.disconnect()
   }, [])
-
-  const emit = useCallback((event: string, data?: any) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit(event, data)
-    }
-  }, [])
-
-  // Helper methods
-  const startAudio = useCallback(() => emit('start_audio'), [emit])
-  const stopAudio = useCallback(() => emit('stop_audio'), [emit])
-  const captureScreen = useCallback(() => emit('capture_screen'), [emit])
-  const submitQuestion = useCallback((question: string) => {
-    emit('submit_question', { question })
-  }, [emit])
-  const setBackendMode = useCallback((mode: string) => {
-    emit('set_mode', { mode })
-  }, [emit])
-  const pause = useCallback(() => emit('pause'), [emit])
-  const resume = useCallback(() => emit('resume'), [emit])
-  const getAIProviders = useCallback(() => emit('get_ai_providers'), [emit])
-  const setAIProviderBackend = useCallback((provider: string, model?: string) => {
-    emit('set_ai_provider', { provider, model })
-  }, [emit])
 
   return {
     connect,
     disconnect,
-    emit,
-    startAudio,
-    stopAudio,
-    captureScreen,
-    submitQuestion,
-    setBackendMode,
-    pause,
-    resume,
-    getAIProviders,
-    setAIProvider: setAIProviderBackend
+    emit: socketService.emit.bind(socketService),
+    startAudio: socketService.startAudio.bind(socketService),
+    stopAudio: socketService.stopAudio.bind(socketService),
+    captureScreen: socketService.captureScreen.bind(socketService),
+    submitQuestion: socketService.submitQuestion.bind(socketService),
+    setBackendMode: socketService.setMode.bind(socketService),
+    pause: socketService.pause.bind(socketService),
+    resume: socketService.resume.bind(socketService),
+    getAIProviders: () => socketService.emit('get_ai_providers'),
+    setAIProvider: socketService.setAIProvider.bind(socketService)
   }
 }
-

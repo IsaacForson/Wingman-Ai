@@ -54,7 +54,8 @@ def setup_logging():
 
 
 # Global engine instance
-engine: WingmanEngine | None = None
+from typing import Optional
+engine: Optional[WingmanEngine] = None
 
 
 @asynccontextmanager
@@ -109,9 +110,9 @@ app.add_middleware(
 # Include health check routes
 app.include_router(health_router, prefix="/api", tags=["Health"])
 
-# Mount Socket.IO application
+# Mount Socket.IO application at /socket.io path
 socket_app = create_socket_app()
-app.mount("/", socket_app)
+app.mount("/socket.io", socket_app)
 
 
 @app.get("/")

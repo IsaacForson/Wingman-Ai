@@ -95,6 +95,11 @@ class AudioModule:
             except asyncio.CancelledError:
                 pass
         
+        # IMPORTANT: Process any remaining speech buffer before stopping
+        if self._speech_buffer:
+            logger.info(f"Processing remaining speech buffer ({len(self._speech_buffer)} chunks)...")
+            await self._transcribe_buffer()
+        
         await event_bus.emit(EventType.AUDIO_STOPPED, {}, "audio_module")
         logger.info("Audio capture stopped")
     

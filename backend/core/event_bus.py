@@ -4,7 +4,7 @@ Inter-module communication system using async events
 """
 
 import asyncio
-from typing import Callable, Any, Dict, List, Optional
+from typing import Callable, Any, Dict, List, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -60,7 +60,7 @@ class EventType(str, Enum):
 @dataclass
 class Event:
     """Event data structure"""
-    type: EventType | str
+    type: Union[EventType, str]
     data: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
     source: str = "system"
@@ -80,7 +80,7 @@ class EventBus:
         self._history_limit = 1000
         self._lock = asyncio.Lock()
     
-    def subscribe(self, event_type: EventType | str, callback: Callable) -> Callable:
+    def subscribe(self, event_type: Union[EventType, str], callback: Callable) -> Callable:
         """
         Subscribe to an event type
         
@@ -107,7 +107,7 @@ class EventBus:
         # Return unsubscribe function
         return lambda: self._subscribers[event_key].remove(callback)
     
-    async def emit(self, event: Event | EventType | str, data: Optional[Dict[str, Any]] = None, source: str = "system"):
+    async def emit(self, event: Union[Event, EventType, str], data: Optional[Dict[str, Any]] = None, source: str = "system"):
         """
         Emit an event to all subscribers
         
@@ -155,7 +155,7 @@ class EventBus:
         except Exception as e:
             logger.error(f"Error in event callback {callback.__name__}: {e}")
     
-    def get_history(self, event_type: Optional[EventType | str] = None, limit: int = 100) -> List[Event]:
+    def get_history(self, event_type: Optional[Union[EventType, str]] = None, limit: int = 100) -> List[Event]:
         """Get event history, optionally filtered by type"""
         history = self._history
         

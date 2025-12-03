@@ -5,25 +5,40 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/appStore";
-import { Loader2, ChevronDown, MessageSquare, Sparkles } from "lucide-react";
+import { Loader2, ChevronDown, MessageSquare, Sparkles, Mic, MicOff } from "lucide-react";
+import socketService from "../../services/socket";
 
 const NormalState = () => {
-  const { isProcessing, currentQuestion, currentAnswer, setIslandState } =
+  const { isProcessing, isListening, currentQuestion, currentAnswer, setIslandState } =
     useAppStore();
 
   const hasContent = currentQuestion || currentAnswer;
+
+  const handleMicClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log('[NormalState] Mic clicked, isListening:', isListening);
+    if (isListening) {
+      socketService.stopAudio();
+    } else {
+      socketService.startAudio();
+    }
+  };
 
   return (
     <motion.div
       className="w-full h-full flex items-center px-4 cursor-pointer"
       onClick={() => setIslandState("expanded")}
     >
-      {/* Left: Icon/Status */}
-      <motion.div
+      {/* Left: Mic Button */}
+      <motion.button
         className={`
           w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-          ${isProcessing ? "bg-wingman-500/30" : "bg-white/10"}
+          ${isListening ? "bg-red-500/30" : isProcessing ? "bg-wingman-500/30" : "bg-white/10"}
+          hover:bg-white/20 transition-colors
         `}
+        onClick={handleMicClick}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
       >
         {isProcessing ? (
           <motion.div
@@ -32,12 +47,19 @@ const NormalState = () => {
           >
             <Loader2 className="w-4 h-4 text-wingman-400" />
           </motion.div>
+        ) : isListening ? (
+          <motion.div
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+          >
+            <Mic className="w-4 h-4 text-red-400" />
+          </motion.div>
         ) : hasContent ? (
           <Sparkles className="w-4 h-4 text-wingman-400" />
         ) : (
-          <MessageSquare className="w-4 h-4 text-white/60" />
+          <MicOff className="w-4 h-4 text-white/60" />
         )}
-      </motion.div>
+      </motion.button>
 
       {/* Center: Content */}
       <div className="flex-1 mx-3 overflow-hidden">
@@ -70,8 +92,10 @@ const NormalState = () => {
               {currentQuestion.length > 60 && "..."}
             </p>
           </div>
+        ) : isListening ? (
+          <p className="text-sm text-white/60">Listening... speak now</p>
         ) : (
-          <p className="text-sm text-white/60">Listening for questions...</p>
+          <p className="text-sm text-white/60">Click mic to start listening</p>
         )}
       </div>
 
