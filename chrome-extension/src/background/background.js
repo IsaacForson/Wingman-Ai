@@ -168,10 +168,8 @@ async function stealthCapture() {
 
 async function sendToBackend(content, source) {
   try {
-    const { aiProvider } = await chrome.storage.local.get('aiProvider');
-    const provider = aiProvider || 'gemini';
-    
-    console.log(`📤 Sending to backend (provider: ${provider})...`);
+    // Don't send provider - let the backend use whatever the user selected in Electron app
+    console.log(`📤 Sending to backend (using Electron's selected provider)...`);
     
     const response = await fetch(`${BACKEND_URL}/api/analyze`, {
       method: 'POST',
@@ -179,7 +177,7 @@ async function sendToBackend(content, source) {
       body: JSON.stringify({
         content,
         type: source,
-        provider,
+        // provider: null - backend will use its current provider setting
         route_to_electron: true  // Tell backend to send answer to Electron
       })
     });
