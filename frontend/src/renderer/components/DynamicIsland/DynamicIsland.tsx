@@ -22,7 +22,7 @@ const SIZE_PRESETS = {
 }
 
 const DynamicIsland = () => {
-  const { islandState, isPaused, isConnected } = useAppStore()
+  const { islandState, isPaused } = useAppStore()
   
   // Custom size for expanded/fullscreen states
   const [customSize, setCustomSize] = useState<{ width: number; height: number } | null>(null)
@@ -113,7 +113,6 @@ const DynamicIsland = () => {
           border border-white/10
           shadow-island
           ${!isResizing ? 'cursor-move' : ''}
-          ${isConnected ? 'shadow-island-glow' : ''}
           ${isPaused ? 'opacity-60' : ''}
         `}
         style={{ overflow: islandState === 'expanded' || islandState === 'fullscreen' ? 'hidden' : 'visible' }}
@@ -126,25 +125,6 @@ const DynamicIsland = () => {
         onMouseEnter={() => window.wingman?.mouseEnterIsland()}
         onMouseLeave={() => window.wingman?.mouseLeaveIsland()}
       >
-        {/* Glow effect */}
-        <motion.div
-          className="absolute inset-0 rounded-[22px] pointer-events-none"
-          animate={{
-            boxShadow: isConnected
-              ? [
-                  '0 0 20px rgba(14, 165, 233, 0.2)',
-                  '0 0 40px rgba(14, 165, 233, 0.3)',
-                  '0 0 20px rgba(14, 165, 233, 0.2)'
-                ]
-              : 'none'
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: 'easeInOut'
-          }}
-        />
-
         {/* Content based on state */}
         <AnimatePresence mode="wait">
           <motion.div

@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Wingman AI - WebSocket Hook
  * Manages real-time communication with the Python backend
  */
 
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
 import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
@@ -57,7 +58,7 @@ export function useWebSocket() {
       setSessionId(data.data?.session_id || null)
     })
 
-    // Audio events
+    // Audio events - no toasts, UI shows listening state
     socket.on('audio_started', () => {
       console.log('[Socket] Audio started')
       setListening(true)
@@ -66,20 +67,17 @@ export function useWebSocket() {
       if (currentState === 'nano' || currentState === 'mini') {
         setIslandState('normal')
       }
-      toast.success('Listening started')
     })
 
     socket.on('audio_stopped', () => {
       console.log('[Socket] Audio stopped')
       setListening(false)
-      toast('Listening stopped', { icon: '🔇' })
     })
 
     socket.on('audio_status', (data: { status?: string }) => {
       console.log('[Socket] Audio status:', data)
       if (data.status === 'started') {
         setListening(true)
-        toast.success('Listening started')
       } else if (data.status === 'stopped') {
         setListening(false)
       }
@@ -231,7 +229,7 @@ export function useWebSocket() {
       console.log('[Socket] 🥷 Extension capture:', data.status)
       
       if (data.status === 'processing') {
-        // Show processing state
+        // Show processing state - no toast, UI shows it
         setProcessing(true)
         setIslandState('expanded')
         
@@ -247,8 +245,6 @@ export function useWebSocket() {
             source: 'extension' as any
           })
         }
-        
-        toast('📷 Extension captured content...', { icon: '🥷' })
       }
     })
 
@@ -275,8 +271,6 @@ export function useWebSocket() {
       if (data.conversation_id) {
         useAppStore.getState().setActiveConversationId(data.conversation_id)
       }
-      
-      toast.success(`Answer from ${data.provider || 'AI'} (via Extension)`, { icon: '🥷' })
     })
 
     // Request AI providers on connect

@@ -19,7 +19,6 @@ import {
   Mic,
   MicOff,
   Zap,
-  History,
   User,
   Bot,
   Trash2
@@ -41,12 +40,10 @@ const ExpandedState = () => {
     isProcessing,
     isListening,
     aiProvider,
-    mode,
     setCurrentAnswer,
     setCurrentQuestion,
     setProcessing,
     setSettingsOpen,
-    setConversationHistoryOpen,
     clearHistory
   } = useAppStore()
   
@@ -171,12 +168,6 @@ const ExpandedState = () => {
             title="Switch AI Model"
           >
             <Zap className={`w-3.5 h-3.5 ${showAISelector ? 'text-wingman-400' : ''}`} />
-          </ActionButton>
-          <ActionButton 
-            onClick={() => setConversationHistoryOpen(true)}
-            title="Conversation History"
-          >
-            <History className="w-3.5 h-3.5" />
           </ActionButton>
           {allMessages.length > 0 && (
             <ActionButton 
