@@ -21,6 +21,7 @@ import {
   Zap
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { Highlight, themes } from 'prism-react-renderer'
 import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
 import socketService from '../../services/socket'
@@ -184,10 +185,11 @@ const ExpandedState = () => {
           <div className="markdown-content text-sm text-white/90 pr-2">
             <ReactMarkdown
               components={{
-                // Custom code block rendering
+                // Custom code block rendering with syntax highlighting
                 code({ className, children, ...props }) {
                   const match = /language-(\w+)/.exec(className || '')
-                  const isInline = !match
+                  const codeString = String(children).replace(/\n$/, '')
+                  const isInline = !match && !codeString.includes('\n')
                   
                   if (isInline) {
                     return (
@@ -200,15 +202,17 @@ const ExpandedState = () => {
                     )
                   }
                   
+                  const language = match ? match[1] : 'text'
+                  
                   return (
-                    <div className="my-2 rounded-lg overflow-hidden bg-black/40 border border-white/10">
+                    <div className="my-2 rounded-lg overflow-hidden bg-[#1a1a2e] border border-white/10">
                       <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/10">
-                        <span className="text-xs text-white/40 font-mono">
-                          {match[1]}
+                        <span className="text-xs text-wingman-400 font-mono uppercase">
+                          {language}
                         </span>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(String(children))
+                            navigator.clipboard.writeText(codeString)
                             toast.success('Code copied')
                           }}
                           className="text-white/40 hover:text-white transition-colors"
@@ -216,11 +220,29 @@ const ExpandedState = () => {
                           <Copy className="w-3 h-3" />
                         </button>
                       </div>
-                      <pre className="p-3 overflow-x-auto">
-                        <code className="text-xs font-mono text-white/90">
-                          {children}
-                        </code>
-                      </pre>
+                      <Highlight
+                        theme={themes.nightOwl}
+                        code={codeString}
+                        language={language}
+                      >
+                        {({ className: highlightClassName, style, tokens, getLineProps, getTokenProps }) => (
+                          <pre 
+                            className={`${highlightClassName} p-3 overflow-x-auto text-xs`}
+                            style={{ ...style, backgroundColor: 'transparent', margin: 0 }}
+                          >
+                            {tokens.map((line, i) => (
+                              <div key={i} {...getLineProps({ line })} className="leading-relaxed">
+                                <span className="inline-block w-8 text-white/20 select-none text-right pr-4">
+                                  {i + 1}
+                                </span>
+                                {line.map((token, key) => (
+                                  <span key={key} {...getTokenProps({ token })} />
+                                ))}
+                              </div>
+                            ))}
+                          </pre>
+                        )}
+                      </Highlight>
                     </div>
                   )
                 },

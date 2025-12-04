@@ -755,6 +755,27 @@ const PrivacySettings: React.FC = () => {
           </button>
         </div>
       </SettingsSection>
+
+      <SettingsSection title="Application">
+        <div className="flex items-center justify-between py-3 px-4 rounded-lg bg-white/5 border border-white/10">
+          <div>
+            <p className="text-sm text-white">Quit Wingman AI</p>
+            <p className="text-xs text-white/40">
+              Close the application completely
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (confirm("Are you sure you want to quit Wingman AI?")) {
+                window.wingman?.quitApp?.()
+              }
+            }}
+            className="px-4 py-2 rounded-lg bg-white/10 text-white/60 text-sm hover:bg-white/20 hover:text-white transition-colors"
+          >
+            Quit App
+          </button>
+        </div>
+      </SettingsSection>
     </div>
   );
 };

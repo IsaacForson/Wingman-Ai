@@ -19,6 +19,24 @@ try {
   // electron-squirrel-startup not available
 }
 
+// Single instance lock - prevent multiple instances
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // Another instance is already running, quit this one
+  app.quit()
+} else {
+  // This is the primary instance - handle when second instance is launched
+  app.on('second-instance', () => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
+
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
@@ -337,6 +355,12 @@ function setupIPC(): void {
     console.log(`Hotkey for ${action}: ${keys}`)
     // Hotkey customization to be implemented in future
     // Would require unregistering old shortcut and registering new one
+  })
+
+  // Quit app
+  ipcMain.handle('quit-app', () => {
+    isQuitting = true
+    app.quit()
   })
 }
 

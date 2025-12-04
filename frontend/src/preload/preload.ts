@@ -23,6 +23,9 @@ export interface WingmanAPI {
   setIslandPosition: (position: string) => Promise<void>
   setHotkey: (action: string, keys: string) => Promise<void>
   
+  // App control
+  quitApp: () => Promise<void>
+  
   // Mouse enter/leave island (for click-through)
   mouseEnterIsland: () => void
   mouseLeaveIsland: () => void
@@ -57,6 +60,9 @@ contextBridge.exposeInMainWorld('wingman', {
   setHideFromScreenCapture: (hide: boolean) => ipcRenderer.invoke('set-hide-from-screen-capture', hide),
   setIslandPosition: (position: string) => ipcRenderer.invoke('set-island-position', position),
   setHotkey: (action: string, keys: string) => ipcRenderer.invoke('set-hotkey', action, keys),
+  
+  // App control
+  quitApp: () => ipcRenderer.invoke('quit-app'),
   
   // Mouse enter/leave island (for click-through behavior)
   mouseEnterIsland: () => ipcRenderer.send('mouse-enter-island'),
