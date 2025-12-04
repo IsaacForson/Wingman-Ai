@@ -9,17 +9,32 @@ let currentAnswer = null;
 let currentQuestion = null;
 
 // Initialize extension
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('Wingman AI Extension installed');
+chrome.runtime.onInstalled.addListener(async (details) => {
+  console.log('Wingman AI Extension installed/updated:', details.reason);
   
-  // Set default settings - Gemini for extension (better for code/exams)
-  chrome.storage.local.set({
-    isEnabled: true,
-    autoCapture: false,
-    aiProvider: 'gemini',  // Gemini handles code better
-    aiModel: 'gemini-2.0-flash',
-    backendUrl: BACKEND_URL
-  });
+  if (details.reason === 'install') {
+    // Fresh install - set defaults
+    // Using Groq as default since it's fast and reliable
+    chrome.storage.local.set({
+      isEnabled: true,
+      autoCapture: false,
+      aiProvider: 'groq',
+      aiModel: 'llama-3.3-70b-versatile',
+      backendUrl: BACKEND_URL
+    });
+  }
+  // Don't auto-migrate - let user choose their preferred provider
+});
+
+// Check on startup - set default if not set
+chrome.runtime.onStartup.addListener(async () => {
+  const { aiProvider } = await chrome.storage.local.get('aiProvider');
+  if (!aiProvider) {
+    chrome.storage.local.set({
+      aiProvider: 'groq',
+      aiModel: 'llama-3.3-70b-versatile'
+    });
+  }
 });
 
 // Handle keyboard shortcuts

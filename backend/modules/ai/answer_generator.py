@@ -34,8 +34,8 @@ PROVIDER_MODELS = {
     },
     "gemini": {
         "default": "gemini-1.5-flash",
-        "fallback": "gemini-1.5-flash",
-        "models": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
+        "fallback": "gemini-1.0-pro",
+        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.0-pro"]
     },
     "together": {
         "default": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
@@ -378,7 +378,13 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         if not settings.google_api_key:
             raise Exception("Google API key not configured")
         
-        model = self.default_model if self.provider == "gemini" else PROVIDER_MODELS["gemini"]["default"]
+        # Gemini models to try (in order of preference)
+        gemini_models = [
+            "gemini-1.5-flash",
+            "gemini-1.5-pro", 
+            "gemini-2.0-flash-exp",
+            "gemini-1.0-pro"
+        ]
         
         # Convert messages to Gemini format
         system_instruction = ""
@@ -392,8 +398,6 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
             elif msg["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={settings.google_api_key}"
-        
         payload = {
             "contents": contents,
             "systemInstruction": {"parts": [{"text": system_instruction}]} if system_instruction else None,
@@ -406,21 +410,41 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         # Remove None values
         payload = {k: v for k, v in payload.items() if v is not None}
         
-        async with self._http_session.post(url, json=payload) as resp:
-            if resp.status != 200:
-                error = await resp.text()
-                raise Exception(f"Gemini API error: {error}")
-            
-            async for line in resp.content:
-                line = line.decode('utf-8').strip()
-                if line.startswith('data: '):
-                    try:
-                        data = json.loads(line[6:])
-                        text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-                        if text:
-                            yield text
-                    except json.JSONDecodeError:
-                        continue
+        # Try each Gemini model until one works
+        last_error = None
+        for model in gemini_models:
+            try:
+                logger.info(f"Trying Gemini model: {model}")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={settings.google_api_key}"
+                
+                async with self._http_session.post(url, json=payload) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.warning(f"Gemini model {model} failed: {error_text[:200]}")
+                        last_error = error_text
+                        continue  # Try next model
+                    
+                    # Success! Stream the response
+                    logger.info(f"✅ Using Gemini model: {model}")
+                    async for line in resp.content:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith('data: '):
+                            try:
+                                data = json.loads(line[6:])
+                                text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+                                if text:
+                                    yield text
+                            except json.JSONDecodeError:
+                                continue
+                    return  # Success, exit the function
+                    
+            except Exception as e:
+                logger.warning(f"Gemini model {model} error: {e}")
+                last_error = str(e)
+                continue  # Try next model
+        
+        # All models failed
+        raise Exception(f"All Gemini models failed. Last error: {last_error}")
     
     async def _stream_together(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
         """Stream from Together AI (FREE credits on signup)"""
