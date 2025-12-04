@@ -12,6 +12,11 @@ release/
 build/
 *.egg-info/
 
+# Bundled backend (too large for git - built during ./build.sh)
+frontend/resources/backend/
+backend/dist/
+*.spec
+
 # Environment
 .env
 .env.local

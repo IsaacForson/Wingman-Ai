@@ -99,11 +99,16 @@ if [ "$BUILD_BACKEND" = true ]; then
   echo "  Cleaning previous build..."
   rm -rf build dist wingman-backend.spec 2>/dev/null || true
   
-  # Build with PyInstaller
+  # Build with PyInstaller (--onedir is MUCH faster to start than --onefile)
   echo "  Running PyInstaller..."
-  pyinstaller --onefile --name wingman-backend main.py
+  pyinstaller --onedir --name wingman-backend main.py
   
-  if [ -f "dist/wingman-backend" ]; then
+  # Copy .env to dist folder
+  if [ -f ".env" ]; then
+    cp .env dist/wingman-backend/
+  fi
+  
+  if [ -d "dist/wingman-backend" ]; then
     echo -e "${GREEN}  ✓ Backend built successfully!${NC}"
   else
     echo -e "${RED}  ✗ Backend build failed!${NC}"
