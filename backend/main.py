@@ -9,9 +9,12 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from loguru import logger
+import json
 
 from config import settings, get_data_dir, get_logs_dir
 from core.engine import WingmanEngine
@@ -185,6 +188,139 @@ async def set_ai_provider(provider: str, model: str = None):
             "status": "updated"
         }
     return {"error": "Engine not initialized"}
+
+
+# Request model for analyze endpoint
+class AnalyzeRequest(BaseModel):
+    content: str
+    type: str = "screen"  # screen, audio, manual
+    provider: str = None  # Optional: override AI provider
+    model: str = None     # Optional: override model
+
+
+@app.post("/api/analyze")
+async def analyze_content(request: AnalyzeRequest):
+    """
+    Analyze content for questions and generate answers.
+    Used by Chrome extension for REST-based analysis.
+    """
+    logger.info(f"📝 REST API analyze request: type={request.type}, provider={request.provider}, length={len(request.content)}")
+    
+    if not engine or not engine._ai_module:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="No content provided")
+    
+    try:
+        generator = engine._ai_module.answer_generator
+        
+        # Temporarily switch provider if specified (for this request only)
+        original_provider = generator.provider
+        original_model = generator.default_model
+        
+        if request.provider:
+            logger.info(f"🔄 Switching to provider: {request.provider}")
+            generator.set_provider(request.provider)
+            if request.model:
+                generator.default_model = request.model
+        
+        # Build prompt based on content type
+        if request.type == "screen":
+            prompt = f"""Analyze the following content and provide a helpful answer or solution.
+
+IMPORTANT FORMATTING RULES:
+- For code, ALWAYS use markdown code blocks with the language specified: ```python, ```javascript, etc.
+- For multiple choice questions, clearly state the correct answer (e.g., "The correct answer is B") and explain why
+- Keep explanations concise but complete
+- Use bullet points for lists
+
+Content to analyze:
+{content}
+
+Provide your response:"""
+        else:
+            prompt = f"""Answer the following question clearly and concisely.
+
+FORMATTING: If your answer includes code, use markdown code blocks with the language: ```python, ```javascript, etc.
+
+Question: {content}
+
+Answer:"""
+        
+        # Generate answer (non-streaming for REST)
+        answer_chunks = []
+        async for chunk in generator.generate_stream(prompt):
+            answer_chunks.append(chunk)
+        
+        full_answer = "".join(answer_chunks)
+        
+        used_provider = generator.provider
+        used_model = generator.default_model
+        
+        # Restore original provider if we switched
+        if request.provider and original_provider != request.provider:
+            generator.set_provider(original_provider)
+            generator.default_model = original_model
+        
+        logger.info(f"✅ Generated answer using {used_provider}: {len(full_answer)} chars")
+        
+        return {
+            "question": content[:200] + "..." if len(content) > 200 else content,
+            "answer": full_answer,
+            "provider": used_provider,
+            "model": used_model
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze/stream")
+async def analyze_content_stream(request: AnalyzeRequest):
+    """
+    Analyze content and stream the response.
+    Used by Chrome extension for streaming answers.
+    """
+    logger.info(f"📝 REST API streaming analyze: type={request.type}, length={len(request.content)}")
+    
+    if not engine or not engine._ai_module:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="No content provided")
+    
+    async def generate():
+        try:
+            generator = engine._ai_module.answer_generator
+            
+            # Build prompt
+            prompt = f"""Analyze the following and provide a helpful answer:
+
+{content}
+
+Answer:"""
+            
+            async for chunk in generator.generate_stream(prompt):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 def main():

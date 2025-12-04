@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Wingman AI Icons</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    canvas { border: 1px solid #ccc; margin: 10px; }
+    .instructions { background: #f0f0f0; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Wingman AI Icon Generator</h1>
+  
+  <div class="instructions">
+    <h3>Instructions:</h3>
+    <ol>
+      <li>Open this file in Chrome</li>
+      <li>Right-click each canvas below</li>
+      <li>Select "Save image as..."</li>
+      <li>Save to the <code>chrome-extension/icons/</code> folder with the correct filename</li>
+    </ol>
+  </div>
+  
+  <div id="icons"></div>
+  
+  <script>
+    const sizes = [16, 32, 48, 128];
+    const container = document.getElementById('icons');
+    
+    sizes.forEach(size => {
+      const div = document.createElement('div');
+      div.innerHTML = `<h3>icon${size}.png</h3>`;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      canvas.style.width = Math.max(size, 64) + 'px';
+      canvas.style.height = Math.max(size, 64) + 'px';
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Background
+      ctx.fillStyle = '#0a0a0a';
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, size * 0.2);
+      ctx.fill();
+      
+      // Draw wingman logo (simplified layers)
+      const padding = size * 0.15;
+      const center = size / 2;
+      
+      ctx.strokeStyle = '#0ea5e9';
+      ctx.fillStyle = '#0ea5e9';
+      ctx.lineWidth = Math.max(1, size * 0.08);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Top layer (filled)
+      ctx.beginPath();
+      ctx.moveTo(center, padding);
+      ctx.lineTo(padding, center - padding * 0.5);
+      ctx.lineTo(center, center);
+      ctx.lineTo(size - padding, center - padding * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Middle layer (stroke)
+      ctx.beginPath();
+      ctx.moveTo(padding, center + padding * 0.3);
+      ctx.lineTo(center, center + padding);
+      ctx.lineTo(size - padding, center + padding * 0.3);
+      ctx.stroke();
+      
+      // Bottom layer (stroke)
+      ctx.beginPath();
+      ctx.moveTo(padding, size - padding - padding * 0.3);
+      ctx.lineTo(center, size - padding);
+      ctx.lineTo(size - padding, size - padding - padding * 0.3);
+      ctx.stroke();
+      
+      div.appendChild(canvas);
+      container.appendChild(div);
+    });
+  </script>
+</body>
+</html>
+
