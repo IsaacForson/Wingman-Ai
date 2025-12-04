@@ -348,6 +348,24 @@ const ExpandedState = () => {
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="text-xs">Regenerate</span>
             </ActionButton>
+            {/* Listen button for quick access */}
+            <ActionButton 
+              onClick={handleMicClick} 
+              className={`px-2 gap-1 ${isListening ? 'bg-red-500/20 hover:bg-red-500/30' : ''}`}
+              title={isListening ? 'Stop listening' : 'Ask another question'}
+            >
+              {isListening ? (
+                <>
+                  <Mic className="w-3.5 h-3.5 text-red-400" />
+                  <span className="text-xs text-red-400">Stop</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-3.5 h-3.5" />
+                  <span className="text-xs">Listen</span>
+                </>
+              )}
+            </ActionButton>
           </div>
           
           <ActionButton onClick={handleCopy} className="px-3 gap-1.5">

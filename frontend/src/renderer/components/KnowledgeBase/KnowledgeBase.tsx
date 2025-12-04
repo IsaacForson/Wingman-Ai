@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAppStore } from '../../store/appStore'
+// import { useAppStore } from '../../store/appStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import {
   X,
@@ -23,7 +23,6 @@ import {
   Image as ImageIcon,
   FileJson,
   Database,
-  ChevronRight,
   Plus
 } from 'lucide-react'
 import toast from 'react-hot-toast'
