@@ -1,290 +1,304 @@
 /**
- * Wingman AI - Chrome Extension Background Service Worker
- * Handles communication between content scripts, popup, and backend
+ * Wingman AI - Stealth Mode Background Service Worker
+ * 
+ * NO POPUP - Everything works via keyboard shortcuts!
+ * Answers are sent to the Electron Desktop App (hidden from screen share)
+ * 
+ * Hotkeys:
+ * - Cmd+Shift+S: Capture screen content
+ * - Cmd+Shift+L: Toggle audio listening
  */
 
 const BACKEND_URL = 'http://localhost:8765';
+
+// Badge colors for status
+const BADGE_COLORS = {
+  ready: '#00d4aa',      // Green - ready
+  processing: '#ffc107', // Yellow - processing
+  error: '#ff4757',      // Red - error
+  listening: '#ff6b81'   // Pink - listening
+};
+
+// State
 let isListening = false;
-let currentAnswer = null;
-let currentQuestion = null;
+let isConnected = false;
 
-// Initialize extension
+// ============================================
+// INITIALIZATION
+// ============================================
+
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Wingman AI Extension installed/updated:', details.reason);
+  console.log('🥷 Wingman AI Stealth Mode installed:', details.reason);
   
-  if (details.reason === 'install') {
-    // Fresh install - set defaults
-    // Using Groq as default since it's fast and reliable
-    chrome.storage.local.set({
-      isEnabled: true,
-      autoCapture: false,
-      aiProvider: 'groq',
-      aiModel: 'llama-3.3-70b-versatile',
-      backendUrl: BACKEND_URL
-    });
-  }
-  // Don't auto-migrate - let user choose their preferred provider
+  // Set defaults
+  await chrome.storage.local.set({
+    aiProvider: 'gemini',
+    aiModel: 'gemini-1.5-flash'
+  });
+  
+  // Set initial badge
+  setBadge('ready', '✓');
 });
 
-// Check on startup - set default if not set
-chrome.runtime.onStartup.addListener(async () => {
-  const { aiProvider } = await chrome.storage.local.get('aiProvider');
-  if (!aiProvider) {
-    chrome.storage.local.set({
-      aiProvider: 'groq',
-      aiModel: 'llama-3.3-70b-versatile'
-    });
-  }
+// Check connection on startup
+chrome.runtime.onStartup.addListener(() => {
+  checkBackendConnection();
 });
 
-// Handle keyboard shortcuts
+// ============================================
+// BADGE STATUS INDICATOR
+// ============================================
+
+function setBadge(status, text = '') {
+  const color = BADGE_COLORS[status] || BADGE_COLORS.ready;
+  
+  chrome.action.setBadgeBackgroundColor({ color });
+  chrome.action.setBadgeText({ text });
+  
+  // Update tooltip
+  const tooltips = {
+    ready: 'Wingman AI Ready - Cmd+Shift+S to capture',
+    processing: 'Processing...',
+    error: 'Error - Check if backend is running',
+    listening: 'Listening for questions...'
+  };
+  chrome.action.setTitle({ title: tooltips[status] || 'Wingman AI' });
+}
+
+// ============================================
+// KEYBOARD SHORTCUTS
+// ============================================
+
 chrome.commands.onCommand.addListener(async (command) => {
-  console.log('Command received:', command);
+  console.log('🎹 Command received:', command);
   
-  if (command === 'capture_screen') {
-    await captureAndAnalyze();
-  } else if (command === 'toggle_listening') {
-    await toggleListening();
+  // Show we received the command
+  setBadge('processing', '!');
+  
+  switch (command) {
+    case 'capture_screen':
+      console.log('📷 Capture command triggered!');
+      await stealthCapture();
+      break;
+    case 'toggle_listening':
+      console.log('🎤 Listen command triggered!');
+      await toggleListening();
+      break;
+    default:
+      console.log('Unknown command:', command);
   }
 });
 
-// Handle messages from content scripts and popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Message received:', message);
-  
-  switch (message.type) {
-    case 'CAPTURE_PAGE':
-      captureAndAnalyze().then(sendResponse);
-      return true; // Keep channel open for async response
-      
-    case 'TOGGLE_LISTENING':
-      toggleListening().then(sendResponse);
-      return true;
-      
-    case 'GET_STATUS':
-      sendResponse({
-        isListening,
-        currentAnswer,
-        currentQuestion,
-        isConnected: socket?.readyState === WebSocket.OPEN
-      });
-      break;
-      
-    case 'SUBMIT_QUESTION':
-      submitQuestion(message.question).then(sendResponse);
-      return true;
-      
-    case 'PAGE_CONTENT':
-      // Received page content from content script
-      analyzeContent(message.content).then(sendResponse);
-      return true;
-      
-    case 'TRANSCRIPT':
-      // Received speech transcript
-      handleTranscript(message.text, message.isFinal);
-      break;
-      
-    case 'SET_AI_PROVIDER':
-      setAIProvider(message.provider, message.model);
-      break;
-  }
+// Also handle clicking the extension icon
+chrome.action.onClicked.addListener(async () => {
+  console.log('🖱️ Extension icon clicked - triggering capture');
+  await stealthCapture();
 });
 
-// Capture current tab and analyze
-async function captureAndAnalyze() {
+// Log registered commands on startup
+chrome.commands.getAll((commands) => {
+  console.log('📋 Registered commands:', commands);
+});
+
+// ============================================
+// STEALTH CAPTURE
+// ============================================
+
+async function stealthCapture() {
+  console.log('🥷 Stealth capture initiated...');
+  setBadge('processing', '⏳');
+  
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // Get active tab (not extension pages)
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    console.log('📋 Found tabs:', tabs.length, tabs.map(t => t.url?.substring(0, 50)));
+    
+    const tab = tabs.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
     
     if (!tab) {
-      console.error('No active tab found');
-      return { error: 'No active tab' };
+      console.error('❌ No suitable tab found. Tabs:', tabs);
+      setBadge('error', '✗');
+      setTimeout(() => setBadge('ready', '✓'), 3000);
+      return;
     }
     
-    // First, try to inject the content script if it's not already there
+    console.log('📄 Capturing from tab:', tab.id, tab.url?.substring(0, 50));
+    
+    // Capture page content directly
+    let content;
     try {
-      await chrome.scripting.executeScript({
+      const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['src/content/content.js']
+        func: () => {
+          // Get visible text content
+          return document.body.innerText;
+        }
       });
-      console.log('Content script injected');
-    } catch (injectError) {
-      console.log('Content script already exists or cannot inject:', injectError.message);
+      content = results?.[0]?.result;
+      console.log('📝 Script executed, got content:', content?.length || 0, 'chars');
+    } catch (e) {
+      console.error('❌ Script injection failed:', e.message);
+      setBadge('error', '✗');
+      setTimeout(() => setBadge('ready', '✓'), 3000);
+      return;
     }
     
-    // Small delay to let script initialize
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Send message to content script to capture page content
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_CONTENT' });
-      
-      if (response?.content) {
-        return await analyzeContent(response.content);
-      }
-    } catch (msgError) {
-      console.error('Message error:', msgError);
-      // If content script communication fails, try direct capture
-      return await directCapture(tab);
+    if (!content || content.trim().length < 10) {
+      console.error('❌ No content captured or too short');
+      setBadge('error', '✗');
+      setTimeout(() => setBadge('ready', '✓'), 3000);
+      return;
     }
     
-    return { error: 'Failed to capture content' };
+    console.log('✅ Captured content:', content.substring(0, 200) + '...');
+    
+    // Send to backend - it will route to Electron via WebSocket
+    await sendToBackend(content, 'extension_capture');
+    
   } catch (error) {
-    console.error('Capture error:', error);
-    return { error: error.message };
+    console.error('❌ Stealth capture error:', error);
+    setBadge('error', '✗');
+    setTimeout(() => setBadge('ready', '✓'), 3000);
   }
 }
 
-// Direct capture using scripting API (fallback)
-async function directCapture(tab) {
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        // Get all visible text from the page
-        return document.body.innerText;
-      }
-    });
-    
-    if (results?.[0]?.result) {
-      return await analyzeContent(results[0].result);
-    }
-    return { error: 'Could not capture page content' };
-  } catch (error) {
-    console.error('Direct capture error:', error);
-    return { error: 'Cannot access this page. Try refreshing or use a different page.' };
-  }
-}
+// ============================================
+// SEND TO BACKEND (Routes to Electron)
+// ============================================
 
-// Analyze content for questions
-async function analyzeContent(content, source = 'screen') {
-  console.log('Analyzing content:', content.substring(0, 200) + '...');
-  
-  // Store as current question
-  currentQuestion = content;
-  currentAnswer = null;
-  
-  // Notify popup of new question
-  broadcastToPopup({ type: 'QUESTION_DETECTED', question: content });
-  broadcastToPopup({ type: 'ANSWER_GENERATING' });
-  
+async function sendToBackend(content, source) {
   try {
-    // Get current provider from storage (default: gemini for extension)
-    const { aiProvider, aiModel } = await chrome.storage.local.get(['aiProvider', 'aiModel']);
+    const { aiProvider } = await chrome.storage.local.get('aiProvider');
     const provider = aiProvider || 'gemini';
-    const model = aiModel || 'gemini-2.0-flash';
     
-    console.log(`Using AI provider: ${provider} (${model})`);
+    console.log(`📤 Sending to backend (provider: ${provider})...`);
     
-    // Send to backend REST API for analysis with provider preference
     const response = await fetch(`${BACKEND_URL}/api/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        content, 
+      body: JSON.stringify({
+        content,
         type: source,
-        provider,  // Tell backend which AI to use
-        model
+        provider,
+        route_to_electron: true  // Tell backend to send answer to Electron
       })
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      throw new Error(errorData.detail || `HTTP ${response.status}`);
+      throw new Error(`HTTP ${response.status}`);
     }
     
     const result = await response.json();
-    currentAnswer = result.answer;
+    console.log('✅ Answer received and routed to Electron');
     
-    console.log('Got answer:', currentAnswer?.substring(0, 100) + '...');
-    broadcastToPopup({ type: 'ANSWER_COMPLETE', answer: result.answer, provider: result.provider });
+    // Success - show green badge briefly
+    setBadge('ready', '✓');
     
     return result;
+    
   } catch (error) {
-    console.error('Analysis failed:', error.message);
-    broadcastToPopup({ type: 'ANSWER_ERROR', error: error.message });
-    return { error: error.message };
+    console.error('Backend error:', error);
+    setBadge('error', '!');
+    setTimeout(() => setBadge('ready', '✓'), 3000);
+    throw error;
   }
 }
 
-// Check backend connection status
+// ============================================
+// AUDIO LISTENING
+// ============================================
+
+async function toggleListening() {
+  isListening = !isListening;
+  
+  console.log(`🎤 Listening: ${isListening}`);
+  
+  if (isListening) {
+    setBadge('listening', '🎤');
+    
+    // Tell backend to start listening
+    try {
+      await fetch(`${BACKEND_URL}/api/listen/start`, { method: 'POST' });
+    } catch (e) {
+      console.log('Backend listen start:', e.message);
+    }
+  } else {
+    setBadge('ready', '✓');
+    
+    // Tell backend to stop listening
+    try {
+      await fetch(`${BACKEND_URL}/api/listen/stop`, { method: 'POST' });
+    } catch (e) {
+      console.log('Backend listen stop:', e.message);
+    }
+  }
+  
+  // Also try to toggle in current tab (for Web Speech API fallback)
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && !tab.url?.startsWith('chrome')) {
+      await chrome.tabs.sendMessage(tab.id, { 
+        type: isListening ? 'START_LISTENING' : 'STOP_LISTENING' 
+      });
+    }
+  } catch (e) {
+    // Tab might not have content script
+  }
+}
+
+// ============================================
+// BACKEND CONNECTION CHECK
+// ============================================
+
 async function checkBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`, { 
+    const response = await fetch(`${BACKEND_URL}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     });
-    const connected = response.ok;
-    broadcastToPopup({ type: connected ? 'CONNECTED' : 'DISCONNECTED' });
-    return connected;
+    
+    isConnected = response.ok;
+    
+    if (isConnected && !isListening) {
+      setBadge('ready', '✓');
+    } else if (!isConnected) {
+      setBadge('error', '!');
+    }
+    
+    return isConnected;
   } catch (error) {
-    broadcastToPopup({ type: 'DISCONNECTED' });
+    isConnected = false;
+    setBadge('error', '!');
     return false;
   }
 }
 
-// Periodically check connection
-setInterval(checkBackendConnection, 5000);
+// Check connection periodically
+setInterval(checkBackendConnection, 10000);
 
-// Toggle listening mode
-async function toggleListening() {
-  isListening = !isListening;
-  
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    await chrome.tabs.sendMessage(tab.id, { 
-      type: isListening ? 'START_LISTENING' : 'STOP_LISTENING' 
-    });
+// ============================================
+// MESSAGE HANDLING (from content scripts)
+// ============================================
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'TRANSCRIPT' && message.isFinal) {
+    // Audio transcript received - analyze it
+    console.log('🎤 Transcript:', message.text);
+    sendToBackend(message.text, 'audio_transcript');
   }
   
-  broadcastToPopup({ type: 'LISTENING_STATUS', isListening });
-  
-  return { isListening };
-}
-
-// Handle speech transcript
-function handleTranscript(text, isFinal) {
-  if (isFinal && text.trim().length > 10) {
-    // Check if it's a question
-    const questionIndicators = ['?', 'what', 'how', 'why', 'explain', 'describe'];
-    const isQuestion = questionIndicators.some(q => text.toLowerCase().includes(q));
-    
-    if (isQuestion) {
-      currentQuestion = text;
-      broadcastToPopup({ type: 'QUESTION_DETECTED', question: text, source: 'audio' });
-      analyzeContent(text);
-    }
-  } else {
-    broadcastToPopup({ type: 'TRANSCRIPT_PARTIAL', text });
+  if (message.type === 'PAGE_CONTENT') {
+    sendToBackend(message.content, 'page_content');
   }
-}
+});
 
-// Submit manual question
-async function submitQuestion(question) {
-  currentQuestion = question;
-  return await analyzeContent(question);
-}
+// ============================================
+// STARTUP
+// ============================================
 
-// Set AI provider
-function setAIProvider(provider, model) {
-  chrome.storage.local.set({ aiProvider: provider, aiModel: model });
-  
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({
-      type: 'set_ai_provider',
-      provider,
-      model
-    }));
-  }
-}
+console.log('🥷 Wingman AI Stealth Mode initialized');
+console.log('   📷 Cmd+Shift+S = Capture screen');
+console.log('   🎤 Cmd+Shift+L = Toggle listening');
+console.log('   👁️ Answers appear in Desktop App (hidden!)');
 
-// Broadcast message to popup and side panel
-function broadcastToPopup(message) {
-  chrome.runtime.sendMessage(message).catch(() => {
-    // Popup might not be open, that's fine
-  });
-}
-
-// Initialize - check backend connection
 checkBackendConnection();
-console.log('Wingman AI background script initialized');
-

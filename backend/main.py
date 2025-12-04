@@ -18,7 +18,7 @@ import json
 
 from config import settings, get_data_dir, get_logs_dir
 from core.engine import WingmanEngine
-from core.websocket_server import create_socket_app
+from core.websocket_server import create_socket_app, sio
 from core.event_bus import event_bus
 from core.health import router as health_router
 
@@ -196,6 +196,7 @@ class AnalyzeRequest(BaseModel):
     type: str = "screen"  # screen, audio, manual
     provider: str = None  # Optional: override AI provider
     model: str = None     # Optional: override model
+    route_to_electron: bool = False  # If true, emit answer to Electron via WebSocket
 
 
 @app.post("/api/analyze")
@@ -203,8 +204,9 @@ async def analyze_content(request: AnalyzeRequest):
     """
     Analyze content for questions and generate answers.
     Used by Chrome extension for REST-based analysis.
+    Routes answers to Electron desktop app if route_to_electron is True.
     """
-    logger.info(f"📝 REST API analyze request: type={request.type}, provider={request.provider}, length={len(request.content)}")
+    logger.info(f"📝 REST API analyze request: type={request.type}, provider={request.provider}, route_to_electron={request.route_to_electron}")
     
     if not engine or not engine._ai_module:
         raise HTTPException(status_code=503, detail="Engine not initialized")
@@ -226,8 +228,16 @@ async def analyze_content(request: AnalyzeRequest):
             if request.model:
                 generator.default_model = request.model
         
+        # Emit "processing" event to Electron if routing
+        if request.route_to_electron:
+            await sio.emit('extension_capture', {
+                'status': 'processing',
+                'question': content[:300] + '...' if len(content) > 300 else content,
+                'source': request.type
+            })
+        
         # Build prompt based on content type
-        if request.type == "screen":
+        if request.type in ["screen", "extension_capture"]:
             prompt = f"""Analyze the following content and provide a helpful answer or solution.
 
 IMPORTANT FORMATTING RULES:
@@ -266,16 +276,49 @@ Answer:"""
         
         logger.info(f"✅ Generated answer using {used_provider}: {len(full_answer)} chars")
         
+        # 🚀 ROUTE TO ELECTRON: Emit answer via WebSocket so Electron can display it
+        if request.route_to_electron:
+            logger.info("📤 Routing answer to Electron desktop app...")
+            await sio.emit('extension_answer', {
+                'question': content[:300] + '...' if len(content) > 300 else content,
+                'answer': full_answer,
+                'provider': used_provider,
+                'model': used_model,
+                'source': request.type
+            })
+        
         return {
             "question": content[:200] + "..." if len(content) > 200 else content,
             "answer": full_answer,
             "provider": used_provider,
-            "model": used_model
+            "model": used_model,
+            "routed_to_electron": request.route_to_electron
         }
         
     except Exception as e:
         logger.error(f"❌ Analysis error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/test-extension")
+async def test_extension_flow():
+    """
+    Test endpoint to verify Electron receives extension answers.
+    Visit http://localhost:8765/api/test-extension in your browser.
+    """
+    logger.info("🧪 TEST: Sending test answer to Electron...")
+    
+    await sio.emit('extension_answer', {
+        'question': 'Test question from backend',
+        'answer': '**This is a test answer!**\n\nIf you see this in the Dynamic Island, the flow works! 🎉',
+        'provider': 'test',
+        'model': 'test',
+        'source': 'test_endpoint'
+    })
+    
+    logger.info("✅ TEST: Emitted extension_answer event")
+    
+    return {"status": "ok", "message": "Test answer sent to Electron. Check Dynamic Island!"}
 
 
 @app.post("/api/analyze/stream")

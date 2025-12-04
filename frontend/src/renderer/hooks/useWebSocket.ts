@@ -207,6 +207,58 @@ export function useWebSocket() {
       }
     })
 
+    // ============================================
+    // 🥷 EXTENSION CAPTURE EVENTS (Stealth Mode)
+    // Receives answers from Chrome Extension via backend
+    // ============================================
+    
+    socket.on('extension_capture', (data: { status?: string; question?: string; source?: string }) => {
+      console.log('[Socket] 🥷 Extension capture:', data.status)
+      
+      if (data.status === 'processing') {
+        // Show processing state
+        setProcessing(true)
+        setIslandState('expanded')
+        
+        // Set the question
+        if (data.question) {
+          setCurrentQuestion(data.question)
+          setCurrentAnswer({
+            id: uuidv4(),
+            question: data.question,
+            answer: '',
+            isStreaming: true,
+            timestamp: new Date(),
+            source: 'extension' as any
+          })
+        }
+        
+        toast('📷 Extension captured content...', { icon: '🥷' })
+      }
+    })
+
+    socket.on('extension_answer', (data: { question?: string; answer?: string; provider?: string; model?: string; source?: string }) => {
+      console.log('[Socket] 🥷 Extension answer received!')
+      
+      setProcessing(false)
+      setIslandState('expanded')
+      
+      const answerEntry = {
+        id: uuidv4(),
+        question: data.question || 'Extension Capture',
+        answer: data.answer || '',
+        isStreaming: false,
+        timestamp: new Date(),
+        source: 'extension' as any
+      }
+      
+      setCurrentAnswer(answerEntry)
+      addToHistory(answerEntry)
+      incrementAnswers()
+      
+      toast.success(`Answer from ${data.provider || 'AI'} (via Extension)`, { icon: '🥷' })
+    })
+
     // Request AI providers on connect
     socketService.emit('get_ai_providers')
 

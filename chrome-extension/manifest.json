@@ -2,14 +2,13 @@
   "manifest_version": 3,
   "name": "Wingman AI",
   "version": "1.0.0",
-  "description": "AI-powered interview assistant - captures questions and provides answers invisibly",
+  "description": "Stealth AI assistant - captures questions via hotkeys, answers appear in desktop app",
   
   "permissions": [
     "activeTab",
     "tabs",
     "scripting",
-    "storage",
-    "sidePanel"
+    "storage"
   ],
   
   "host_permissions": [
@@ -31,18 +30,13 @@
   ],
   
   "action": {
-    "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Wingman AI"
-  },
-  
-  "side_panel": {
-    "default_path": "src/sidepanel/sidepanel.html"
+    "default_title": "Wingman AI - Use Cmd+Shift+S to capture"
   },
   
   "icons": {
@@ -53,19 +47,12 @@
   },
   
   "commands": {
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+W",
-        "mac": "Command+Shift+W"
-      },
-      "description": "Open Wingman AI"
-    },
     "capture_screen": {
       "suggested_key": {
         "default": "Ctrl+Shift+S",
         "mac": "Command+Shift+S"
       },
-      "description": "Capture and analyze screen"
+      "description": "Capture and analyze screen (stealth)"
     },
     "toggle_listening": {
       "suggested_key": {
@@ -76,4 +63,3 @@
     }
   }
 }
-
