@@ -79,6 +79,10 @@
       {
         "from": "../backend/dist/wingman-backend",
         "to": "backend/wingman-backend"
+      },
+      {
+        "from": "../backend/.env",
+        "to": "backend/.env"
       }
     ],
     "mac": {

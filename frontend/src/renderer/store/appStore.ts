@@ -23,7 +23,7 @@ interface ConversationMessage {
   content: string
   timestamp: string
 }
-export type AIProvider = 'openai' | 'anthropic' | 'groq' | 'gemini' | 'together' | 'huggingface' | 'ollama'
+export type AIProvider = 'groq' | 'gemini' | 'cerebras' | 'cohere'
 
 interface TranscriptLine {
   id: string
@@ -40,6 +40,8 @@ interface Answer {
   isStreaming: boolean
   timestamp: Date
   source: 'audio' | 'screen' | 'manual'
+  provider?: string
+  model?: string
 }
 
 interface AppState {
@@ -273,7 +275,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // AI Provider
   aiProvider: 'groq',
   aiModel: 'llama-3.3-70b-versatile',
-  availableProviders: ['groq', 'ollama'],
+  availableProviders: ['groq', 'gemini', 'cerebras', 'cohere'],
   setAIProvider: (provider, model) => set({ 
     aiProvider: provider,
     ...(model && { aiModel: model })

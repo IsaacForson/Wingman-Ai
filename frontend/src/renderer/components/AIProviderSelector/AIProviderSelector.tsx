@@ -8,12 +8,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, AIProvider } from '../../store/appStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { 
-  Cpu, 
   Zap, 
-  Brain, 
   Sparkles, 
-  Server, 
-  Cloud,
+  Cpu,
+  MessageSquare,
   ChevronDown,
   Check
 } from 'lucide-react'
@@ -40,52 +38,28 @@ const PROVIDER_INFO: Record<AIProvider, {
     color: 'text-blue-400',
     isFree: true
   },
-  ollama: {
-    name: 'Ollama',
-    icon: <Server className="w-4 h-4" />,
-    description: 'Local models (FREE)',
+  cerebras: {
+    name: 'Cerebras',
+    icon: <Cpu className="w-4 h-4" />,
+    description: 'Fast AI chip inference (FREE)',
+    color: 'text-purple-400',
+    isFree: true
+  },
+  cohere: {
+    name: 'Cohere',
+    icon: <MessageSquare className="w-4 h-4" />,
+    description: 'Enterprise AI (FREE tier)',
     color: 'text-green-400',
     isFree: true
-  },
-  together: {
-    name: 'Together AI',
-    icon: <Cloud className="w-4 h-4" />,
-    description: 'Open models (Paid)',
-    color: 'text-purple-400',
-    isFree: false
-  },
-  huggingface: {
-    name: 'HuggingFace',
-    icon: <Brain className="w-4 h-4" />,
-    description: 'Open-source models (FREE)',
-    color: 'text-yellow-400',
-    isFree: true
-  },
-  openai: {
-    name: 'OpenAI',
-    icon: <Cpu className="w-4 h-4" />,
-    description: 'GPT-4 & GPT-3.5 (Paid)',
-    color: 'text-emerald-400',
-    isFree: false
-  },
-  anthropic: {
-    name: 'Anthropic',
-    icon: <Brain className="w-4 h-4" />,
-    description: 'Claude models (Paid)',
-    color: 'text-amber-400',
-    isFree: false
   }
 }
 
 // Models for each provider
 const PROVIDER_MODELS: Record<AIProvider, string[]> = {
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
-  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'],
-  ollama: ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'phi3'],
-  together: ['meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo', 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'],
-  huggingface: ['meta-llama/Meta-Llama-3-8B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.2'],
-  openai: ['gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo'],
-  anthropic: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307']
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
+  cerebras: ['llama-3.3-70b', 'llama3.1-8b'],
+  cohere: ['command-r-plus-08-2024', 'command-r-08-2024', 'command-a-03-2025']
 }
 
 interface AIProviderSelectorProps {
@@ -96,11 +70,9 @@ const AIProviderSelector: React.FC<AIProviderSelectorProps> = ({ compact = false
   const { aiProvider, aiModel, availableProviders, setAIProvider } = useAppStore()
   const { setAIProvider: setAIProviderBackend } = useWebSocket()
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedProvider, setSelectedProvider] = useState<AIProvider>(aiProvider)
 
   const handleProviderSelect = (provider: AIProvider) => {
     const defaultModel = PROVIDER_MODELS[provider]?.[0] || ''
-    setSelectedProvider(provider)
     setAIProvider(provider, defaultModel)
     setAIProviderBackend(provider, defaultModel)
     setIsOpen(false)
@@ -136,31 +108,15 @@ const AIProviderSelector: React.FC<AIProviderSelectorProps> = ({ compact = false
               exit={{ opacity: 0, y: -10 }}
             >
               <div className="p-2">
-                <p className="text-xs text-white/40 px-2 py-1 uppercase tracking-wide">Free Providers</p>
-                {availableProviders
-                  .filter(p => PROVIDER_INFO[p]?.isFree)
-                  .map(provider => (
-                    <ProviderOption
-                      key={provider}
-                      provider={provider}
-                      isSelected={aiProvider === provider}
-                      onClick={() => handleProviderSelect(provider)}
-                    />
-                  ))}
-                
-                <div className="border-t border-white/10 my-2" />
-                
-                <p className="text-xs text-white/40 px-2 py-1 uppercase tracking-wide">Paid Providers</p>
-                {availableProviders
-                  .filter(p => !PROVIDER_INFO[p]?.isFree)
-                  .map(provider => (
-                    <ProviderOption
-                      key={provider}
-                      provider={provider}
-                      isSelected={aiProvider === provider}
-                      onClick={() => handleProviderSelect(provider)}
-                    />
-                  ))}
+                <p className="text-xs text-white/40 px-2 py-1 uppercase tracking-wide">AI Providers</p>
+                {availableProviders.map(provider => (
+                  <ProviderOption
+                    key={provider}
+                    provider={provider}
+                    isSelected={aiProvider === provider}
+                    onClick={() => handleProviderSelect(provider)}
+                  />
+                ))}
               </div>
             </motion.div>
           )}
@@ -275,4 +231,3 @@ const ProviderOption: React.FC<{
 }
 
 export default AIProviderSelector
-

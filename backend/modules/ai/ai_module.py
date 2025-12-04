@@ -122,6 +122,12 @@ class AIModule:
         ):
             yield chunk
     
+    def get_last_used_provider_info(self) -> tuple:
+        """Get the provider and model used for the last response"""
+        if self.answer_generator:
+            return self.answer_generator.get_last_used_info()
+        return None, None
+    
     async def shutdown(self):
         """Shutdown AI module"""
         if self.answer_generator:

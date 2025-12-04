@@ -1,10 +1,10 @@
 """
 Wingman AI - Answer Generator
 AI-powered answer generation with streaming support
-Supports multiple AI providers: OpenAI, Anthropic, Groq, Gemini, Together, HuggingFace, Ollama
+Supports: Groq, Gemini, Cerebras, Cohere
 """
 
-from typing import Optional, AsyncGenerator, Dict, Any, Literal
+from typing import Optional, AsyncGenerator, Dict, Any, Literal, Tuple
 from loguru import logger
 import aiohttp
 import json
@@ -13,20 +13,10 @@ from config import settings
 
 
 # Provider type
-AIProvider = Literal["openai", "anthropic", "groq", "gemini", "together", "huggingface", "ollama"]
+AIProvider = Literal["groq", "gemini", "cerebras", "cohere"]
 
 # Model configurations for each provider
 PROVIDER_MODELS = {
-    "openai": {
-        "default": "gpt-4-turbo-preview",
-        "fallback": "gpt-3.5-turbo",
-        "models": ["gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"]
-    },
-    "anthropic": {
-        "default": "claude-3-opus-20240229",
-        "fallback": "claude-3-sonnet-20240229",
-        "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
-    },
     "groq": {
         "default": "llama-3.3-70b-versatile",
         "fallback": "llama-3.1-8b-instant",
@@ -34,23 +24,18 @@ PROVIDER_MODELS = {
     },
     "gemini": {
         "default": "gemini-1.5-flash",
-        "fallback": "gemini-1.0-pro",
-        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.0-pro"]
+        "fallback": "gemini-1.5-pro",
+        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
     },
-    "together": {
-        "default": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-        "fallback": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "models": ["meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+    "cerebras": {
+        "default": "llama-3.3-70b",
+        "fallback": "llama3.1-8b",
+        "models": ["llama-3.3-70b", "llama3.1-8b"]
     },
-    "huggingface": {
-        "default": "meta-llama/Meta-Llama-3-8B-Instruct",
-        "fallback": "mistralai/Mistral-7B-Instruct-v0.2",
-        "models": ["meta-llama/Meta-Llama-3-8B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2", "microsoft/Phi-3-mini-4k-instruct"]
-    },
-    "ollama": {
-        "default": "llama3.2",
-        "fallback": "llama3.2",
-        "models": ["llama3.2", "llama3.1", "mistral", "codellama", "phi3"]
+    "cohere": {
+        "default": "command-r-plus-08-2024",
+        "fallback": "command-r-08-2024",
+        "models": ["command-r-plus-08-2024", "command-r-08-2024", "command-a-03-2025"]
     }
 }
 
@@ -71,9 +56,11 @@ class AnswerGenerator:
         self.default_model = default_model or settings.default_model
         self.fallback_model = fallback_model or settings.fallback_model
         
-        # Client instances
-        self._openai_client = None
-        self._anthropic_client = None
+        # Track the actual provider/model used for responses
+        self.last_used_provider: str = None
+        self.last_used_model: str = None
+        
+        # HTTP session for API calls
         self._http_session: Optional[aiohttp.ClientSession] = None
     
     async def initialize(self):
@@ -82,24 +69,6 @@ class AnswerGenerator:
         
         # Create HTTP session for API calls
         self._http_session = aiohttp.ClientSession()
-        
-        # Initialize OpenAI if key available
-        if settings.openai_api_key:
-            try:
-                from openai import AsyncOpenAI
-                self._openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
-                logger.info("OpenAI client initialized")
-            except ImportError:
-                logger.warning("OpenAI package not installed")
-        
-        # Initialize Anthropic if key available
-        if settings.anthropic_api_key:
-            try:
-                from anthropic import AsyncAnthropic
-                self._anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-                logger.info("Anthropic client initialized")
-            except ImportError:
-                logger.warning("Anthropic package not installed")
         
         # Log available providers
         available = self.get_available_providers()
@@ -112,20 +81,14 @@ class AnswerGenerator:
         """Get list of available providers based on configured API keys"""
         available = []
         
-        if settings.openai_api_key:
-            available.append("openai")
-        if settings.anthropic_api_key:
-            available.append("anthropic")
         if settings.groq_api_key:
             available.append("groq")
         if settings.google_api_key:
             available.append("gemini")
-        if settings.together_api_key:
-            available.append("together")
-        if settings.huggingface_api_key:
-            available.append("huggingface")
-        # Ollama is always available if running locally
-        available.append("ollama")
+        if settings.cerebras_api_key:
+            available.append("cerebras")
+        if settings.cohere_api_key:
+            available.append("cohere")
         
         return available
     
@@ -140,6 +103,10 @@ class AnswerGenerator:
             logger.info(f"Switched to provider: {provider}")
         else:
             logger.warning(f"Provider {provider} not available")
+    
+    def get_last_used_info(self) -> Tuple[str, str]:
+        """Get the last used provider and model"""
+        return self.last_used_provider, self.last_used_model
     
     def _get_system_prompt(self, mode: str) -> str:
         """Get system prompt based on operating mode"""
@@ -255,6 +222,9 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         """Generate a complete answer"""
         chunks = []
         async for chunk in self.generate_stream(question, context, mode, conversation_history):
+            if isinstance(chunk, dict):
+                # Skip metadata chunks
+                continue
             chunks.append(chunk)
         return "".join(chunks)
     
@@ -269,13 +239,10 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         messages = self._build_messages(question, context, mode, conversation_history)
         
         provider_methods = {
-            "openai": self._stream_openai,
-            "anthropic": self._stream_anthropic,
             "groq": self._stream_groq,
             "gemini": self._stream_gemini,
-            "together": self._stream_together,
-            "huggingface": self._stream_huggingface,
-            "ollama": self._stream_ollama
+            "cerebras": self._stream_cerebras,
+            "cohere": self._stream_cohere
         }
         
         # Try primary provider
@@ -288,7 +255,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 logger.error(f"{self.provider} error: {e}")
         
         # Try fallback providers
-        fallback_order = ["groq", "ollama", "gemini", "together", "huggingface", "openai", "anthropic"]
+        fallback_order = ["groq", "gemini", "cerebras", "cohere"]
         for fallback in fallback_order:
             if fallback != self.provider and fallback in self.get_available_providers():
                 try:
@@ -299,54 +266,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 except Exception as e:
                     logger.error(f"{fallback} fallback error: {e}")
         
-        yield "Error: No AI provider available. Please configure at least one API key or run Ollama locally."
-    
-    async def _stream_openai(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from OpenAI"""
-        if not self._openai_client:
-            raise Exception("OpenAI client not initialized")
-        
-        model = self.default_model if self.provider == "openai" else "gpt-3.5-turbo"
-        
-        response = await self._openai_client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=settings.max_tokens,
-            temperature=settings.temperature,
-            stream=True
-        )
-        
-        async for chunk in response:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    
-    async def _stream_anthropic(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Anthropic Claude"""
-        if not self._anthropic_client:
-            raise Exception("Anthropic client not initialized")
-        
-        system_content = ""
-        anthropic_messages = []
-        
-        for msg in messages:
-            if msg["role"] == "system":
-                system_content += msg["content"] + "\n\n"
-            else:
-                anthropic_messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-        
-        model = self.default_model if self.provider == "anthropic" else "claude-3-haiku-20240307"
-        
-        async with self._anthropic_client.messages.stream(
-            model=model,
-            max_tokens=settings.max_tokens,
-            system=system_content.strip(),
-            messages=anthropic_messages
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
+        yield "Error: No AI provider available. Please configure at least one API key."
     
     async def _stream_groq(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
         """Stream from Groq (FREE - very fast)"""
@@ -354,6 +274,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
             raise Exception("Groq API key not configured")
         
         model = self.default_model if self.provider == "groq" else PROVIDER_MODELS["groq"]["default"]
+        
+        # Track what we're using
+        self.last_used_provider = "groq"
+        self.last_used_model = model
+        logger.info(f"Using Groq model: {model}")
         
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
@@ -390,12 +315,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
             raise Exception("Google API key not configured")
         
         # Gemini models to try (in order of preference)
-        gemini_models = [
-            "gemini-1.5-flash",
-            "gemini-1.5-pro", 
-            "gemini-2.0-flash-exp",
-            "gemini-1.0-pro"
-        ]
+        gemini_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
         
         # Convert messages to Gemini format
         system_instruction = ""
@@ -435,8 +355,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                         last_error = error_text
                         continue  # Try next model
                     
-                    # Success! Stream the response
+                    # Success! Track and stream the response
+                    self.last_used_provider = "gemini"
+                    self.last_used_model = model
                     logger.info(f"✅ Using Gemini model: {model}")
+                    
                     async for line in resp.content:
                         line = line.decode('utf-8').strip()
                         if line.startswith('data: '):
@@ -457,129 +380,143 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         # All models failed
         raise Exception(f"All Gemini models failed. Last error: {last_error}")
     
-    async def _stream_together(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Together AI (FREE credits on signup)"""
-        if not settings.together_api_key:
-            raise Exception("Together API key not configured")
+    async def _stream_cerebras(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from Cerebras (FREE - very fast)"""
+        if not settings.cerebras_api_key:
+            raise Exception("Cerebras API key not configured")
         
-        model = self.default_model if self.provider == "together" else PROVIDER_MODELS["together"]["default"]
+        # Cerebras models to try
+        cerebras_models = ["llama-3.3-70b", "llama3.1-8b"]
         
-        url = "https://api.together.xyz/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {settings.together_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": settings.max_tokens,
-            "temperature": settings.temperature,
-            "stream": True
-        }
-        
-        async with self._http_session.post(url, headers=headers, json=payload) as resp:
-            if resp.status != 200:
-                error = await resp.text()
-                raise Exception(f"Together API error: {error}")
-            
-            async for line in resp.content:
-                line = line.decode('utf-8').strip()
-                if line.startswith('data: ') and line != 'data: [DONE]':
-                    try:
-                        data = json.loads(line[6:])
-                        content = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                        if content:
-                            yield content
-                    except json.JSONDecodeError:
+        last_error = None
+        for model in cerebras_models:
+            try:
+                logger.info(f"Trying Cerebras model: {model}")
+                
+                url = "https://api.cerebras.ai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {settings.cerebras_api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": settings.max_tokens,
+                    "temperature": settings.temperature,
+                    "stream": True
+                }
+                
+                async with self._http_session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        error = await resp.text()
+                        logger.warning(f"Cerebras model {model} failed: {error[:200]}")
+                        last_error = error
                         continue
+                    
+                    # Success! Track and stream
+                    self.last_used_provider = "cerebras"
+                    self.last_used_model = model
+                    logger.info(f"✅ Using Cerebras model: {model}")
+                    
+                    async for line in resp.content:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith('data: ') and line != 'data: [DONE]':
+                            try:
+                                data = json.loads(line[6:])
+                                content = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+                    return
+                    
+            except Exception as e:
+                logger.warning(f"Cerebras model {model} error: {e}")
+                last_error = str(e)
+                continue
+        
+        raise Exception(f"All Cerebras models failed. Last error: {last_error}")
     
-    async def _stream_huggingface(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from HuggingFace Inference API (FREE)"""
-        if not settings.huggingface_api_key:
-            raise Exception("HuggingFace API key not configured")
+    async def _stream_cohere(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from Cohere (FREE tier available)"""
+        if not settings.cohere_api_key:
+            raise Exception("Cohere API key not configured")
         
-        model = self.default_model if self.provider == "huggingface" else PROVIDER_MODELS["huggingface"]["default"]
+        # Cohere models to try
+        cohere_models = ["command-r-plus-08-2024", "command-r-08-2024", "command-a-03-2025"]
         
-        # Build prompt from messages
-        prompt = ""
+        # Convert messages to Cohere format
+        system_message = ""
+        chat_history = []
+        user_message = ""
+        
         for msg in messages:
             if msg["role"] == "system":
-                prompt += f"<|system|>\n{msg['content']}</s>\n"
+                system_message += msg["content"] + "\n"
             elif msg["role"] == "user":
-                prompt += f"<|user|>\n{msg['content']}</s>\n"
+                if user_message:
+                    chat_history.append({"role": "USER", "message": user_message})
+                user_message = msg["content"]
             elif msg["role"] == "assistant":
-                prompt += f"<|assistant|>\n{msg['content']}</s>\n"
-        prompt += "<|assistant|>\n"
+                chat_history.append({"role": "CHATBOT", "message": msg["content"]})
         
-        url = f"https://api-inference.huggingface.co/models/{model}"
-        headers = {
-            "Authorization": f"Bearer {settings.huggingface_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": settings.max_tokens,
-                "temperature": settings.temperature,
-                "return_full_text": False
-            },
-            "stream": True
-        }
-        
-        async with self._http_session.post(url, headers=headers, json=payload) as resp:
-            if resp.status != 200:
-                error = await resp.text()
-                raise Exception(f"HuggingFace API error: {error}")
-            
-            async for line in resp.content:
-                line = line.decode('utf-8').strip()
-                if line.startswith('data:'):
-                    try:
-                        data = json.loads(line[5:])
-                        token = data.get('token', {}).get('text', '')
-                        if token and not token.startswith('<|'):
-                            yield token
-                    except json.JSONDecodeError:
-                        continue
-    
-    async def _stream_ollama(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Ollama (FREE - runs locally)"""
-        model = self.default_model if self.provider == "ollama" else PROVIDER_MODELS["ollama"]["default"]
-        
-        url = f"{settings.ollama_base_url}/api/chat"
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "options": {
-                "num_predict": settings.max_tokens,
-                "temperature": settings.temperature
-            }
-        }
-        
-        try:
-            async with self._http_session.post(url, json=payload) as resp:
-                if resp.status != 200:
-                    error = await resp.text()
-                    raise Exception(f"Ollama error: {error}")
+        last_error = None
+        for model in cohere_models:
+            try:
+                logger.info(f"Trying Cohere model: {model}")
                 
-                async for line in resp.content:
-                    line = line.decode('utf-8').strip()
-                    if line:
-                        try:
-                            data = json.loads(line)
-                            content = data.get('message', {}).get('content', '')
-                            if content:
-                                yield content
-                        except json.JSONDecodeError:
-                            continue
-        except aiohttp.ClientError as e:
-            raise Exception(f"Ollama not running. Start it with: ollama serve\nError: {e}")
+                url = "https://api.cohere.ai/v1/chat"
+                headers = {
+                    "Authorization": f"Bearer {settings.cohere_api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "message": user_message,
+                    "preamble": system_message.strip() if system_message else None,
+                    "chat_history": chat_history if chat_history else None,
+                    "max_tokens": settings.max_tokens,
+                    "temperature": settings.temperature,
+                    "stream": True
+                }
+                
+                # Remove None values
+                payload = {k: v for k, v in payload.items() if v is not None}
+                
+                async with self._http_session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        error = await resp.text()
+                        logger.warning(f"Cohere model {model} failed: {error[:200]}")
+                        last_error = error
+                        continue
+                    
+                    # Success! Track and stream
+                    self.last_used_provider = "cohere"
+                    self.last_used_model = model
+                    logger.info(f"✅ Using Cohere model: {model}")
+                    
+                    async for line in resp.content:
+                        line = line.decode('utf-8').strip()
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                if data.get('event_type') == 'text-generation':
+                                    text = data.get('text', '')
+                                    if text:
+                                        yield text
+                            except json.JSONDecodeError:
+                                continue
+                    return
+                    
+            except Exception as e:
+                logger.warning(f"Cohere model {model} error: {e}")
+                last_error = str(e)
+                continue
+        
+        raise Exception(f"All Cohere models failed. Last error: {last_error}")
     
     async def shutdown(self):
         """Cleanup resources"""
         if self._http_session:
             await self._http_session.close()
-        self._openai_client = None
-        self._anthropic_client = None
         logger.debug("Answer generator shutdown")

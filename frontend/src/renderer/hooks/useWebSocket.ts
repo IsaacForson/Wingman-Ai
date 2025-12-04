@@ -152,8 +152,8 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('answer_complete', (data: { data?: { answer?: string; conversation_id?: string } }) => {
-      console.log('[Socket] Answer complete')
+    socket.on('answer_complete', (data: { data?: { answer?: string; conversation_id?: string; provider?: string; model?: string } }) => {
+      console.log('[Socket] Answer complete via', data.data?.provider)
       isGenerating = false
       setProcessing(false)
       
@@ -162,7 +162,9 @@ export function useWebSocket() {
         const finalAnswer = {
           ...currentAnswer,
           answer: data.data?.answer || currentAnswer.answer,
-          isStreaming: false
+          isStreaming: false,
+          provider: data.data?.provider,
+          model: data.data?.model
         }
         // Add to history and clear currentAnswer to avoid duplicates
         addToHistory(finalAnswer)
@@ -249,7 +251,7 @@ export function useWebSocket() {
     })
 
     socket.on('extension_answer', (data: { question?: string; answer?: string; provider?: string; model?: string; source?: string; conversation_id?: string; mode?: string }) => {
-      console.log('[Socket] 🥷 Extension answer received!')
+      console.log('[Socket] 🥷 Extension answer received via', data.provider)
       
       setProcessing(false)
       setIslandState('expanded')
@@ -260,7 +262,9 @@ export function useWebSocket() {
         answer: data.answer || '',
         isStreaming: false,
         timestamp: new Date(),
-        source: 'extension' as any
+        source: 'extension' as any,
+        provider: data.provider,
+        model: data.model
       }
       
       setCurrentAnswer(answerEntry)

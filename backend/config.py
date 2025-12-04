@@ -26,17 +26,15 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]  # Allow all origins for Electron file:// protocol
     
     # AI Providers - API Keys
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY")
     google_api_key: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
-    together_api_key: Optional[str] = Field(default=None, env="TOGETHER_API_KEY")  # Paid
-    huggingface_api_key: Optional[str] = Field(default=None, env="HUGGINGFACE_API_KEY")
-    ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
+    cerebras_api_key: Optional[str] = Field(default=None, env="CEREBRAS_API_KEY")
+    cohere_api_key: Optional[str] = Field(default=None, env="COHERE_API_KEY")
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")  # For Whisper transcription fallback
     elevenlabs_api_key: Optional[str] = Field(default=None, env="ELEVENLABS_API_KEY")
     
     # AI Model Settings
-    # Provider options: openai, anthropic, groq, gemini, together, huggingface, ollama
+    # Provider options: groq, gemini, cerebras, cohere
     ai_provider: str = Field(default="groq", env="AI_PROVIDER")
     default_model: str = Field(default="llama-3.3-70b-versatile", env="DEFAULT_MODEL")
     fallback_model: str = Field(default="llama-3.1-8b-instant", env="FALLBACK_MODEL")
@@ -85,6 +83,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra keys in .env file
 
 
 # Global settings instance

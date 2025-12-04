@@ -312,6 +312,8 @@ interface ChatMessageProps {
     isStreaming: boolean
     timestamp: Date
     source: string
+    provider?: string
+    model?: string
   }
   onCopy: (text: string) => void
   isLast: boolean
@@ -339,7 +341,12 @@ const ChatMessage = ({ entry, onCopy, isLast }: ChatMessageProps) => {
           </div>
           <div className="flex-1 bg-wingman-500/5 rounded-lg p-3 border border-wingman-500/10">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-wingman-400">Wingman</p>
+              <p className="text-xs text-wingman-400">
+                Wingman
+                {entry.provider && !entry.isStreaming && (
+                  <span className="text-white/30 ml-1">via {entry.provider}</span>
+                )}
+              </p>
               {entry.answer && !entry.isStreaming && (
                 <button
                   onClick={() => onCopy(entry.answer)}

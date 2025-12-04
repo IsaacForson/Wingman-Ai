@@ -303,6 +303,9 @@ class WingmanEngine:
             
             full_answer = "".join(answer_chunks)
             
+            # Get provider/model info
+            provider, model = self._ai_module.get_last_used_provider_info() if self._ai_module else (None, None)
+            
             # Add assistant response to conversation
             if conversation_id:
                 conv_manager.add_message("assistant", full_answer, conversation_id)
@@ -314,7 +317,9 @@ class WingmanEngine:
                 "question": question,
                 "answer": full_answer,
                 "source": source,
-                "conversation_id": conversation_id
+                "conversation_id": conversation_id,
+                "provider": provider,
+                "model": model
             }, "engine")
             
             logger.info(f"Answer generated: {len(full_answer)} chars (conv: {conversation_id})")
