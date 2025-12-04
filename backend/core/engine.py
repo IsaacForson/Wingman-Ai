@@ -209,15 +209,17 @@ class WingmanEngine:
             }, "engine")
     
     async def _on_question_detected(self, event: Event):
-        """Handle question detection"""
+        """Handle question detection with conversation context"""
         if self._is_processing:
             logger.debug("Already processing a question, skipping")
             return
         
         question_text = event.data.get("text", "")
         source = event.data.get("source", "unknown")
+        conversation_id = event.data.get("conversation_id")
+        mode = event.data.get("mode", self.mode.value)
         
-        logger.info(f"Question detected from {source}: {question_text[:100]}...")
+        logger.info(f"Question detected from {source}: {question_text[:100]}... (conv: {conversation_id})")
         
         if self.session:
             self.session.questions_count += 1
@@ -226,9 +228,9 @@ class WingmanEngine:
         self._current_question = question_text
         
         try:
-            # Generate answer
+            # Generate answer with conversation context
             if self._ai_module:
-                await self._generate_answer(question_text, source)
+                await self._generate_answer(question_text, source, conversation_id, mode)
         finally:
             self._is_processing = False
     
@@ -251,23 +253,47 @@ class WingmanEngine:
         # Could auto-switch modes based on active app
         logger.debug(f"Active app changed: {app_name}")
     
-    async def _generate_answer(self, question: str, source: str):
-        """Generate an answer for a detected question"""
+    async def _generate_answer(self, question: str, source: str, conversation_id: str = None, mode: str = None):
+        """Generate an answer for a detected question with conversation history"""
+        from modules.conversation import get_conversation_manager
+        
         await event_bus.emit(EventType.ANSWER_GENERATING, {
             "question": question,
-            "source": source
+            "source": source,
+            "conversation_id": conversation_id
         }, "engine")
         
         try:
-            # Get context for RAG
+            # Get conversation history for context
+            conv_manager = get_conversation_manager()
+            conversation_history = []
+            
+            if conversation_id:
+                conversation_history = conv_manager.get_context_for_ai(conversation_id, limit=10)
+                # Add user question to conversation
+                conv_manager.add_message("user", question, conversation_id)
+            else:
+                # Use active conversation or create new
+                conv = conv_manager.get_active_conversation()
+                if conv:
+                    conversation_history = conv.get_context_messages(limit=10)
+                    conv_manager.add_message("user", question, conv.id)
+                    conversation_id = conv.id
+                else:
+                    conv = conv_manager.create_conversation(mode or self.mode.value)
+                    conv_manager.add_message("user", question, conv.id)
+                    conversation_id = conv.id
+            
+            # Get RAG context
             context = await self._get_context(question)
             
-            # Stream answer generation
+            # Stream answer generation with conversation history
             answer_chunks = []
             async for chunk in self._ai_module.generate_answer_stream(
                 question=question,
                 context=context,
-                mode=self.mode.value
+                mode=mode or self.mode.value,
+                conversation_history=conversation_history
             ):
                 answer_chunks.append(chunk)
                 await event_bus.emit(EventType.ANSWER_CHUNK, {
@@ -277,16 +303,21 @@ class WingmanEngine:
             
             full_answer = "".join(answer_chunks)
             
+            # Add assistant response to conversation
+            if conversation_id:
+                conv_manager.add_message("assistant", full_answer, conversation_id)
+            
             if self.session:
                 self.session.answers_count += 1
             
             await event_bus.emit(EventType.ANSWER_COMPLETE, {
                 "question": question,
                 "answer": full_answer,
-                "source": source
+                "source": source,
+                "conversation_id": conversation_id
             }, "engine")
             
-            logger.info(f"Answer generated: {len(full_answer)} chars")
+            logger.info(f"Answer generated: {len(full_answer)} chars (conv: {conversation_id})")
             
         except Exception as e:
             logger.error(f"Error generating answer: {e}")
@@ -352,11 +383,13 @@ class WingmanEngine:
             return await self._screen_module.capture_and_analyze()
         return None
     
-    async def process_manual_question(self, question: str):
-        """Process a manually submitted question"""
+    async def process_manual_question(self, question: str, conversation_id: str = None, mode: str = None):
+        """Process a manually submitted question with optional conversation context"""
         await event_bus.emit(EventType.QUESTION_DETECTED, {
             "text": question,
-            "source": "manual"
+            "source": "manual",
+            "conversation_id": conversation_id,
+            "mode": mode or self.mode.value
         }, "engine")
     
     async def get_status(self) -> Dict[str, Any]:

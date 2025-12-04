@@ -21,6 +21,7 @@ from core.engine import WingmanEngine
 from core.websocket_server import create_socket_app, sio
 from core.event_bus import event_bus
 from core.health import router as health_router
+from modules.conversation import get_conversation_manager
 
 
 # Configure logging
@@ -319,6 +320,198 @@ async def test_extension_flow():
     logger.info("✅ TEST: Emitted extension_answer event")
     
     return {"status": "ok", "message": "Test answer sent to Electron. Check Dynamic Island!"}
+
+
+# ============================================
+# Conversation History API
+# ============================================
+
+@app.get("/api/conversations")
+async def list_conversations():
+    """List all conversations"""
+    conv_manager = get_conversation_manager()
+    return {
+        "conversations": conv_manager.list_conversations(),
+        "active_id": conv_manager.active_conversation_id
+    }
+
+
+@app.post("/api/conversations")
+async def create_conversation(mode: str = "interview"):
+    """Create a new conversation"""
+    conv_manager = get_conversation_manager()
+    conv = conv_manager.create_conversation(mode)
+    return {"id": conv.id, "mode": conv.mode, "created": True}
+
+
+@app.get("/api/conversations/{conv_id}")
+async def get_conversation(conv_id: str):
+    """Get a specific conversation with messages"""
+    conv_manager = get_conversation_manager()
+    conv = conv_manager.get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv.to_dict()
+
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation(conv_id: str):
+    """Delete a specific conversation"""
+    conv_manager = get_conversation_manager()
+    if conv_manager.delete_conversation(conv_id):
+        return {"deleted": True}
+    raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@app.post("/api/conversations/{conv_id}/activate")
+async def activate_conversation(conv_id: str):
+    """Set a conversation as active"""
+    conv_manager = get_conversation_manager()
+    if conv_manager.set_active_conversation(conv_id):
+        return {"activated": True, "id": conv_id}
+    raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@app.post("/api/conversations/{conv_id}/mode")
+async def change_conversation_mode(conv_id: str, mode: str):
+    """Change the mode of a conversation"""
+    conv_manager = get_conversation_manager()
+    conv = conv_manager.change_mode(mode, conv_id)
+    if conv:
+        return {"mode": conv.mode, "id": conv_id}
+    raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@app.delete("/api/conversations")
+async def clear_all_conversations():
+    """Clear all conversations"""
+    conv_manager = get_conversation_manager()
+    conv_manager.clear_all()
+    return {"cleared": True}
+
+
+@app.post("/api/conversations/cleanup")
+async def cleanup_expired_conversations(hours: int = 48):
+    """Clean up conversations older than specified hours"""
+    conv_manager = get_conversation_manager()
+    conv_manager.cleanup_expired(hours)
+    return {"cleaned_up": True, "hours": hours}
+
+
+# Request model for conversational analyze endpoint
+class ConversationalAnalyzeRequest(BaseModel):
+    content: str
+    conversation_id: str = None  # Optional: use existing conversation
+    mode: str = "interview"
+    provider: str = None
+    model: str = None
+    route_to_electron: bool = False
+
+
+@app.post("/api/analyze/conversational")
+async def analyze_conversational(request: ConversationalAnalyzeRequest):
+    """
+    Analyze content with conversation history context.
+    Maintains conversation continuity across requests.
+    """
+    logger.info(f"📝 Conversational analyze: mode={request.mode}, conv_id={request.conversation_id}")
+    
+    if not engine or not engine._ai_module:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="No content provided")
+    
+    try:
+        conv_manager = get_conversation_manager()
+        generator = engine._ai_module.answer_generator
+        
+        # Get or create conversation
+        if request.conversation_id:
+            conv = conv_manager.get_conversation(request.conversation_id)
+            if not conv:
+                conv = conv_manager.create_conversation(request.mode)
+        else:
+            # Use active conversation or create new
+            conv = conv_manager.get_active_conversation()
+            if not conv:
+                conv = conv_manager.create_conversation(request.mode)
+        
+        # Get conversation history for context
+        history = conv.get_context_messages(limit=10)
+        
+        # Add user message to conversation
+        conv_manager.add_message("user", content, conv.id)
+        
+        # Temporarily switch provider if specified
+        original_provider = generator.provider
+        original_model = generator.default_model
+        
+        if request.provider:
+            generator.set_provider(request.provider)
+            if request.model:
+                generator.default_model = request.model
+        
+        # Emit processing event
+        if request.route_to_electron:
+            await sio.emit('extension_capture', {
+                'status': 'processing',
+                'question': content[:300],
+                'conversation_id': conv.id,
+                'source': 'conversational'
+            })
+        
+        # Generate answer with conversation history
+        answer_chunks = []
+        async for chunk in generator.generate_stream(
+            content, 
+            mode=conv.mode,
+            conversation_history=history
+        ):
+            answer_chunks.append(chunk)
+        
+        full_answer = "".join(answer_chunks)
+        
+        # Add assistant response to conversation
+        conv_manager.add_message("assistant", full_answer, conv.id)
+        
+        used_provider = generator.provider
+        used_model = generator.default_model
+        
+        # Restore original provider
+        if request.provider and original_provider != request.provider:
+            generator.set_provider(original_provider)
+            generator.default_model = original_model
+        
+        logger.info(f"✅ Conversational answer using {used_provider}: {len(full_answer)} chars")
+        
+        # Route to Electron
+        if request.route_to_electron:
+            await sio.emit('extension_answer', {
+                'question': content[:300],
+                'answer': full_answer,
+                'provider': used_provider,
+                'model': used_model,
+                'conversation_id': conv.id,
+                'mode': conv.mode,
+                'source': 'conversational'
+            })
+        
+        return {
+            "question": content[:200] + "..." if len(content) > 200 else content,
+            "answer": full_answer,
+            "provider": used_provider,
+            "model": used_model,
+            "conversation_id": conv.id,
+            "mode": conv.mode,
+            "message_count": len(conv.messages),
+            "routed_to_electron": request.route_to_electron
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Conversational analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/analyze/stream")

@@ -95,15 +95,17 @@ class AIModule:
         self,
         question: str,
         context: str = "",
-        mode: str = "interview"
+        mode: str = "interview",
+        conversation_history: list = None
     ) -> AsyncGenerator[str, None]:
         """
-        Stream answer generation
+        Stream answer generation with conversation history
         
         Args:
             question: The question to answer
             context: Additional context
             mode: Operating mode
+            conversation_history: List of previous messages for context
             
         Yields:
             Answer chunks as they're generated
@@ -115,7 +117,8 @@ class AIModule:
         async for chunk in self.answer_generator.generate_stream(
             question=question,
             context=context,
-            mode=mode
+            mode=mode,
+            conversation_history=conversation_history
         ):
             yield chunk
     

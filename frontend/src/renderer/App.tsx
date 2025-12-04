@@ -8,8 +8,11 @@ import DynamicIsland from "./components/DynamicIsland/DynamicIsland"
 import { SettingsPanel } from "./components/Settings"
 import { CommandPalette } from "./components/CommandPalette"
 import { HistoryView } from "./components/History"
+import { ConversationHistory } from "./components/ConversationHistory"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
+import socketService from "./services/socket"
+import toast from "react-hot-toast"
 
 function App() {
   const { 
@@ -22,6 +25,10 @@ function App() {
     setCommandPaletteOpen,
     isHistoryOpen,
     setHistoryOpen,
+    isConversationHistoryOpen,
+    setConversationHistoryOpen,
+    isListening,
+    setIslandState,
   } = useAppStore()
   
   const { connect, disconnect } = useWebSocket()
@@ -29,14 +36,14 @@ function App() {
   // Handle click-through when modals are open
   // When any modal is open, we need to disable click-through so user can interact
   useEffect(() => {
-    const hasModalOpen = isSettingsOpen || isCommandPaletteOpen || isHistoryOpen
+    const hasModalOpen = isSettingsOpen || isCommandPaletteOpen || isHistoryOpen || isConversationHistoryOpen
     
     if (window.wingman?.setIgnoreMouse) {
       // When modal is open, don't ignore mouse events (allow clicks)
       // When modal is closed, ignore mouse events (click-through)
       window.wingman.setIgnoreMouse(!hasModalOpen)
     }
-  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen])
+  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, isConversationHistoryOpen])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -65,17 +72,48 @@ function App() {
         setHistoryOpen(true)
       }
       
+      // Cmd/Ctrl + Shift + L -> Start Listening
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'l') {
+        e.preventDefault()
+        if (!isListening) {
+          socketService.startAudio()
+          toast.success('Started listening')
+        }
+      }
+      
+      // Cmd/Ctrl + Shift + K -> Stop Listening
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
+        e.preventDefault()
+        if (isListening) {
+          socketService.stopAudio()
+          toast('Stopped listening', { icon: '🔇' })
+        }
+      }
+      
+      // Cmd/Ctrl + L -> Toggle Listening
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'l') {
+        e.preventDefault()
+        if (isListening) {
+          socketService.stopAudio()
+          toast('Stopped listening', { icon: '🔇' })
+        } else {
+          socketService.startAudio()
+          toast.success('Started listening')
+        }
+      }
+      
       // Escape -> Close overlays
       if (e.key === 'Escape') {
         if (isCommandPaletteOpen) setCommandPaletteOpen(false)
         else if (isSettingsOpen) setSettingsOpen(false)
         else if (isHistoryOpen) setHistoryOpen(false)
+        else if (isConversationHistoryOpen) setConversationHistoryOpen(false)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, setSettingsOpen, setCommandPaletteOpen, setHistoryOpen, togglePause])
+  }, [isSettingsOpen, isCommandPaletteOpen, isHistoryOpen, isConversationHistoryOpen, isListening, setSettingsOpen, setCommandPaletteOpen, setHistoryOpen, setConversationHistoryOpen, togglePause])
 
   useEffect(() => {
     // Connect to backend
@@ -130,6 +168,9 @@ function App() {
         isOpen={isHistoryOpen}
         onClose={() => setHistoryOpen(false)}
       />
+      
+      {/* Conversation History Panel */}
+      <ConversationHistory />
       
       {/* Toast Notifications */}
       <Toaster

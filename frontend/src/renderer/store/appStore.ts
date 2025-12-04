@@ -7,6 +7,22 @@ import { create } from 'zustand'
 
 export type IslandState = 'nano' | 'mini' | 'normal' | 'expanded' | 'fullscreen'
 export type OperatingMode = 'interview' | 'study' | 'work' | 'meeting' | 'research' | 'practice'
+
+interface ConversationSummary {
+  id: string
+  title: string
+  mode: OperatingMode
+  created_at: string
+  updated_at: string
+  message_count: number
+  is_active: boolean
+}
+
+interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+}
 export type AIProvider = 'openai' | 'anthropic' | 'groq' | 'gemini' | 'together' | 'huggingface' | 'ollama'
 
 interface TranscriptLine {
@@ -128,6 +144,14 @@ interface AppState {
   availableProviders: AIProvider[]
   setAIProvider: (provider: AIProvider, model?: string) => void
   setAvailableProviders: (providers: AIProvider[]) => void
+  
+  // Conversation History
+  conversations: ConversationSummary[]
+  activeConversationId: string | null
+  setConversations: (conversations: ConversationSummary[]) => void
+  setActiveConversationId: (id: string | null) => void
+  isConversationHistoryOpen: boolean
+  setConversationHistoryOpen: (open: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -254,6 +278,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     aiProvider: provider,
     ...(model && { aiModel: model })
   }),
-  setAvailableProviders: (providers) => set({ availableProviders: providers })
+  setAvailableProviders: (providers) => set({ availableProviders: providers }),
+  
+  // Conversation History
+  conversations: [],
+  activeConversationId: null,
+  setConversations: (conversations) => set({ conversations }),
+  setActiveConversationId: (id) => set({ activeConversationId: id }),
+  isConversationHistoryOpen: false,
+  setConversationHistoryOpen: (open) => set({ isConversationHistoryOpen: open })
 }))
 

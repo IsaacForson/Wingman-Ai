@@ -216,9 +216,10 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         self,
         question: str,
         context: str,
-        mode: str
+        mode: str,
+        conversation_history: list[Dict[str, str]] = None
     ) -> list[Dict[str, str]]:
-        """Build the prompt messages"""
+        """Build the prompt messages with optional conversation history"""
         messages = [
             {"role": "system", "content": self._get_system_prompt(mode)}
         ]
@@ -228,6 +229,14 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 "role": "system",
                 "content": f"Relevant context:\n{context}"
             })
+        
+        # Add conversation history for context (maintains continuity)
+        if conversation_history:
+            for msg in conversation_history:
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
         
         messages.append({
             "role": "user",
@@ -240,11 +249,12 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         self,
         question: str,
         context: str = "",
-        mode: str = "interview"
+        mode: str = "interview",
+        conversation_history: list[Dict[str, str]] = None
     ) -> str:
         """Generate a complete answer"""
         chunks = []
-        async for chunk in self.generate_stream(question, context, mode):
+        async for chunk in self.generate_stream(question, context, mode, conversation_history):
             chunks.append(chunk)
         return "".join(chunks)
     
@@ -252,10 +262,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         self,
         question: str,
         context: str = "",
-        mode: str = "interview"
+        mode: str = "interview",
+        conversation_history: list[Dict[str, str]] = None
     ) -> AsyncGenerator[str, None]:
         """Stream answer generation from the selected provider"""
-        messages = self._build_messages(question, context, mode)
+        messages = self._build_messages(question, context, mode, conversation_history)
         
         provider_methods = {
             "openai": self._stream_openai,

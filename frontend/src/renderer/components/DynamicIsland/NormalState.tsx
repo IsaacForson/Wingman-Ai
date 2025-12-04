@@ -5,8 +5,9 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/appStore";
-import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings } from "lucide-react";
+import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings, History } from "lucide-react";
 import socketService from "../../services/socket";
+import { ModeSelector } from "../ModeSelector";
 
 const NormalState = () => {
   const { 
@@ -15,7 +16,8 @@ const NormalState = () => {
     currentQuestion, 
     currentAnswer, 
     setIslandState,
-    setSettingsOpen 
+    setSettingsOpen,
+    setConversationHistoryOpen
   } = useAppStore();
 
   const hasContent = currentQuestion || currentAnswer;
@@ -33,6 +35,11 @@ const NormalState = () => {
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setSettingsOpen(true);
+  };
+
+  const handleHistoryClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConversationHistoryOpen(true);
   };
 
   return (
@@ -108,8 +115,22 @@ const NormalState = () => {
         )}
       </div>
 
-      {/* Right: Settings + Expand */}
+      {/* Right: Mode, History, Settings + Expand */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Mode selector */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <ModeSelector compact />
+        </div>
+        
+        {/* History button */}
+        <button
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"
+          onClick={handleHistoryClick}
+          title="Conversation History"
+        >
+          <History className="w-3.5 h-3.5 text-white/50 hover:text-white/80" />
+        </button>
+        
         {/* Settings button */}
         <button
           className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"

@@ -86,12 +86,14 @@ class WebSocketManager:
         
         @self.sio.event
         async def submit_question(sid, data):
-            """Submit a manual question"""
+            """Submit a manual question with conversation context"""
             question = data.get("question", "")
-            logger.debug(f"Manual question from {sid}: {question[:50]}...")
+            conversation_id = data.get("conversation_id")
+            mode = data.get("mode")
+            logger.debug(f"Manual question from {sid}: {question[:50]}... (conv: {conversation_id}, mode: {mode})")
             from main import engine
             if engine and question:
-                await engine.process_manual_question(question)
+                await engine.process_manual_question(question, conversation_id=conversation_id, mode=mode)
         
         @self.sio.event
         async def set_mode(sid, data):

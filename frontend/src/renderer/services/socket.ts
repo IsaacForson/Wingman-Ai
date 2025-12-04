@@ -104,8 +104,8 @@ class SocketService {
     this.emit('capture_screen')
   }
 
-  submitQuestion(question: string): void {
-    this.emit('submit_question', { question })
+  submitQuestion(question: string, conversationId?: string, mode?: string): void {
+    this.emit('submit_question', { question, conversation_id: conversationId, mode })
   }
 
   setMode(mode: string): void {

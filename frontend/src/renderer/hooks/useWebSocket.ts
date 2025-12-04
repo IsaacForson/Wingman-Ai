@@ -61,7 +61,11 @@ export function useWebSocket() {
     socket.on('audio_started', () => {
       console.log('[Socket] Audio started')
       setListening(true)
-      setIslandState('normal')
+      // Only switch to normal if we're in nano/mini state, NOT if already expanded
+      const currentState = useAppStore.getState().islandState
+      if (currentState === 'nano' || currentState === 'mini') {
+        setIslandState('normal')
+      }
       toast.success('Listening started')
     })
 
@@ -108,7 +112,12 @@ export function useWebSocket() {
       const question = data.data?.text || ''
       setCurrentQuestion(question)
       incrementQuestions()
-      setIslandState('normal')
+      
+      // Don't minimize if already in expanded/fullscreen - stay in chat view
+      const currentState = useAppStore.getState().islandState
+      if (currentState !== 'expanded' && currentState !== 'fullscreen') {
+        setIslandState('normal')
+      }
       
       // Create new answer entry
       setCurrentAnswer({
@@ -145,7 +154,7 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('answer_complete', (data: { data?: { answer?: string } }) => {
+    socket.on('answer_complete', (data: { data?: { answer?: string; conversation_id?: string } }) => {
       console.log('[Socket] Answer complete')
       isGenerating = false
       setProcessing(false)
@@ -157,9 +166,15 @@ export function useWebSocket() {
           answer: data.data?.answer || currentAnswer.answer,
           isStreaming: false
         }
-        setCurrentAnswer(finalAnswer)
+        // Add to history and clear currentAnswer to avoid duplicates
         addToHistory(finalAnswer)
+        setCurrentAnswer(null) // Clear current - it's now in history
         incrementAnswers()
+      }
+      
+      // Update active conversation if returned from backend
+      if (data.data?.conversation_id) {
+        useAppStore.getState().setActiveConversationId(data.data.conversation_id)
       }
     })
 
@@ -237,7 +252,7 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('extension_answer', (data: { question?: string; answer?: string; provider?: string; model?: string; source?: string }) => {
+    socket.on('extension_answer', (data: { question?: string; answer?: string; provider?: string; model?: string; source?: string; conversation_id?: string; mode?: string }) => {
       console.log('[Socket] 🥷 Extension answer received!')
       
       setProcessing(false)
@@ -255,6 +270,11 @@ export function useWebSocket() {
       setCurrentAnswer(answerEntry)
       addToHistory(answerEntry)
       incrementAnswers()
+      
+      // Update active conversation if returned from backend
+      if (data.conversation_id) {
+        useAppStore.getState().setActiveConversationId(data.conversation_id)
+      }
       
       toast.success(`Answer from ${data.provider || 'AI'} (via Extension)`, { icon: '🥷' })
     })
