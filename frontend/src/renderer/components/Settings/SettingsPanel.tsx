@@ -368,7 +368,6 @@ const AISettings: React.FC = () => {
     temperature, setTemperature,
     maxTokens, setMaxTokens,
     streamResponses, setStreamResponses,
-    ollamaBaseUrl, setOllamaBaseUrl,
   } = useSettingsStore();
 
   const providerModels: Record<string, { value: string; label: string }[]> = {
@@ -379,37 +378,16 @@ const AISettings: React.FC = () => {
       { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
       { value: "gemma2-9b-it", label: "Gemma 2 9B" },
     ],
-    openai: [
-      { value: "gpt-4-turbo-preview", label: "GPT-4 Turbo" },
-      { value: "gpt-4", label: "GPT-4" },
-      { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
-    ],
-    anthropic: [
-      { value: "claude-3-opus-20240229", label: "Claude 3 Opus" },
-      { value: "claude-3-sonnet-20240229", label: "Claude 3 Sonnet" },
-      { value: "claude-3-haiku-20240307", label: "Claude 3 Haiku" },
-    ],
     gemini: [
       { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
       { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
       { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
     ],
-    together: [
-      { value: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", label: "LLaMA 3.1 70B" },
-      { value: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", label: "LLaMA 3.1 8B" },
-      { value: "mistralai/Mixtral-8x7B-Instruct-v0.1", label: "Mixtral 8x7B" },
-    ],
-    huggingface: [
-      { value: "meta-llama/Meta-Llama-3-8B-Instruct", label: "LLaMA 3 8B" },
-      { value: "mistralai/Mistral-7B-Instruct-v0.2", label: "Mistral 7B" },
-    ],
-    ollama: [
-      { value: "llama3.2", label: "LLaMA 3.2" },
-      { value: "llama3.1", label: "LLaMA 3.1" },
-      { value: "mistral", label: "Mistral" },
-      { value: "codellama", label: "Code LLaMA" },
-      { value: "phi3", label: "Phi 3" },
-      { value: "qwen2.5", label: "Qwen 2.5" },
+    mistral: [
+      { value: "mistral-large-latest", label: "Mistral Large (recommended)" },
+      { value: "mistral-medium-latest", label: "Mistral Medium" },
+      { value: "mistral-small-latest", label: "Mistral Small (faster)" },
+      { value: "open-mistral-7b", label: "Open Mistral 7B" },
     ],
   };
 
@@ -423,11 +401,7 @@ const AISettings: React.FC = () => {
           options={[
             { value: "groq", label: "🚀 Groq (FREE & Fast)" },
             { value: "gemini", label: "🔮 Google Gemini (FREE tier)" },
-            { value: "ollama", label: "🦙 Ollama (Local, FREE)" },
-            { value: "openai", label: "🤖 OpenAI (Paid)" },
-            { value: "anthropic", label: "🧠 Anthropic Claude (Paid)" },
-            { value: "together", label: "⚡ Together AI (Credits)" },
-            { value: "huggingface", label: "🤗 HuggingFace (FREE)" },
+            { value: "mistral", label: "🌟 Mistral AI" },
           ]}
           onChange={(v) => {
             setAIProvider(v as any);
@@ -438,22 +412,6 @@ const AISettings: React.FC = () => {
             }
           }}
         />
-
-        {aiProvider === "ollama" && (
-          <TextSetting
-            label="Ollama URL"
-            description="URL where Ollama is running"
-            value={ollamaBaseUrl}
-            placeholder="http://localhost:11434"
-            onChange={setOllamaBaseUrl}
-          />
-        )}
-
-        {aiProvider === "ollama" && (
-          <InfoBox type="warning">
-            Make sure Ollama is running. Start it with: <code className="bg-white/10 px-1 rounded">ollama serve</code>
-          </InfoBox>
-        )}
       </SettingsSection>
 
       <SettingsSection title="Model">
@@ -504,10 +462,7 @@ const APIKeysSettings: React.FC = () => {
   const providers = [
     { key: "groq", name: "Groq", url: "https://console.groq.com/keys", free: true },
     { key: "google", name: "Google AI (Gemini)", url: "https://aistudio.google.com/app/apikey", free: true },
-    { key: "huggingface", name: "HuggingFace", url: "https://huggingface.co/settings/tokens", free: true },
-    { key: "openai", name: "OpenAI", url: "https://platform.openai.com/api-keys", free: false },
-    { key: "anthropic", name: "Anthropic", url: "https://console.anthropic.com/", free: false },
-    { key: "together", name: "Together AI", url: "https://api.together.xyz/settings/api-keys", free: false },
+    { key: "mistral", name: "Mistral AI", url: "https://console.mistral.ai/api-keys/", free: true },
   ];
 
   return (

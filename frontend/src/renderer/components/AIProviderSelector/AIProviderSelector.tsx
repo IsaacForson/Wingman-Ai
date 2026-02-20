@@ -11,7 +11,6 @@ import {
   Zap, 
   Sparkles, 
   Cpu,
-  MessageSquare,
   ChevronDown,
   Check
 } from 'lucide-react'
@@ -38,18 +37,11 @@ const PROVIDER_INFO: Record<AIProvider, {
     color: 'text-blue-400',
     isFree: true
   },
-  cerebras: {
-    name: 'Cerebras',
+  mistral: {
+    name: 'Mistral AI',
     icon: <Cpu className="w-4 h-4" />,
-    description: 'Fast AI chip inference (FREE)',
+    description: 'Mistral Large & Small models',
     color: 'text-purple-400',
-    isFree: true
-  },
-  cohere: {
-    name: 'Cohere',
-    icon: <MessageSquare className="w-4 h-4" />,
-    description: 'Enterprise AI (FREE tier)',
-    color: 'text-green-400',
     isFree: true
   }
 }
@@ -58,8 +50,7 @@ const PROVIDER_INFO: Record<AIProvider, {
 const PROVIDER_MODELS: Record<AIProvider, string[]> = {
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
   gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
-  cerebras: ['llama-3.3-70b', 'llama3.1-8b'],
-  cohere: ['command-r-plus-08-2024', 'command-r-08-2024', 'command-a-03-2025']
+  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'open-mistral-7b']
 }
 
 interface AIProviderSelectorProps {

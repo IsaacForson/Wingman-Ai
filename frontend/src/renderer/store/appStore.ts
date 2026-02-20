@@ -23,7 +23,7 @@ interface ConversationMessage {
   content: string
   timestamp: string
 }
-export type AIProvider = 'groq' | 'gemini' | 'cerebras' | 'cohere'
+export type AIProvider = 'groq' | 'gemini' | 'mistral'
 
 interface TranscriptLine {
   id: string
@@ -275,7 +275,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // AI Provider
   aiProvider: 'groq',
   aiModel: 'llama-3.3-70b-versatile',
-  availableProviders: ['groq', 'gemini', 'cerebras', 'cohere'],
+  availableProviders: ['groq', 'gemini', 'mistral'],
   setAIProvider: (provider, model) => set({ 
     aiProvider: provider,
     ...(model && { aiModel: model })

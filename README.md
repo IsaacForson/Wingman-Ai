@@ -8,7 +8,7 @@ Wingman AI is a desktop application that provides real-time AI assistance by lis
 
 - **Dynamic Island UI** - Beautiful, non-intrusive interface
 - **Real-time Transcription** - Live speech-to-text
-- **AI-Powered Answers** - Multiple AI providers (Groq, Gemini, OpenAI, Claude, Ollama)
+- **AI-Powered Answers** - Multiple AI providers (Groq, Gemini, Mistral)
 - **Screen Analysis** - OCR and code detection
 - **Multiple Modes** - Interview, Study, Work, Meeting, Research
 - **Practice Mode** - Mock interviews with STAR method coaching
@@ -20,7 +20,7 @@ Wingman AI is a desktop application that provides real-time AI assistance by lis
 
 - **Frontend**: Electron + React + TypeScript + Vite + Tailwind CSS
 - **Backend**: Python + FastAPI + Socket.io
-- **AI**: OpenAI, Anthropic, Groq, Google Gemini, Ollama, Hugging Face
+- **AI**: Groq, Google Gemini, Mistral
 
 ## 📋 Prerequisites
 

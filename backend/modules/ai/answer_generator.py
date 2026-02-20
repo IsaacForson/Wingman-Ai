@@ -1,7 +1,7 @@
 """
 Wingman AI - Answer Generator
 AI-powered answer generation with streaming support
-Supports: Groq, Gemini, Cerebras, Cohere
+Supports: Groq, Gemini, Mistral
 """
 
 from typing import Optional, AsyncGenerator, Dict, Any, Literal, Tuple
@@ -13,7 +13,7 @@ from config import settings
 
 
 # Provider type
-AIProvider = Literal["groq", "gemini", "cerebras", "cohere"]
+AIProvider = Literal["groq", "gemini", "mistral"]
 
 # Model configurations for each provider
 PROVIDER_MODELS = {
@@ -27,15 +27,10 @@ PROVIDER_MODELS = {
         "fallback": "gemini-1.5-pro",
         "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
     },
-    "cerebras": {
-        "default": "llama-3.3-70b",
-        "fallback": "llama3.1-8b",
-        "models": ["llama-3.3-70b", "llama3.1-8b"]
-    },
-    "cohere": {
-        "default": "command-r-plus-08-2024",
-        "fallback": "command-r-08-2024",
-        "models": ["command-r-plus-08-2024", "command-r-08-2024", "command-a-03-2025"]
+    "mistral": {
+        "default": "mistral-large-latest",
+        "fallback": "mistral-small-latest",
+        "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "open-mistral-7b"]
     }
 }
 
@@ -85,10 +80,8 @@ class AnswerGenerator:
             available.append("groq")
         if settings.google_api_key:
             available.append("gemini")
-        if settings.cerebras_api_key:
-            available.append("cerebras")
-        if settings.cohere_api_key:
-            available.append("cohere")
+        if settings.mistral_api_key:
+            available.append("mistral")
         
         return available
     
@@ -241,8 +234,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         provider_methods = {
             "groq": self._stream_groq,
             "gemini": self._stream_gemini,
-            "cerebras": self._stream_cerebras,
-            "cohere": self._stream_cohere
+            "mistral": self._stream_mistral
         }
         
         # Try primary provider
@@ -255,7 +247,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 logger.error(f"{self.provider} error: {e}")
         
         # Try fallback providers
-        fallback_order = ["groq", "gemini", "cerebras", "cohere"]
+        fallback_order = ["groq", "gemini", "mistral"]
         for fallback in fallback_order:
             if fallback != self.provider and fallback in self.get_available_providers():
                 try:
@@ -380,22 +372,22 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         # All models failed
         raise Exception(f"All Gemini models failed. Last error: {last_error}")
     
-    async def _stream_cerebras(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Cerebras (FREE - very fast)"""
-        if not settings.cerebras_api_key:
-            raise Exception("Cerebras API key not configured")
+    async def _stream_mistral(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from Mistral AI"""
+        if not settings.mistral_api_key:
+            raise Exception("Mistral API key not configured")
         
-        # Cerebras models to try
-        cerebras_models = ["llama-3.3-70b", "llama3.1-8b"]
+        # Mistral models to try
+        mistral_models = ["mistral-large-latest", "mistral-small-latest", "open-mistral-7b"]
         
         last_error = None
-        for model in cerebras_models:
+        for model in mistral_models:
             try:
-                logger.info(f"Trying Cerebras model: {model}")
+                logger.info(f"Trying Mistral model: {model}")
                 
-                url = "https://api.cerebras.ai/v1/chat/completions"
+                url = "https://api.mistral.ai/v1/chat/completions"
                 headers = {
-                    "Authorization": f"Bearer {settings.cerebras_api_key}",
+                    "Authorization": f"Bearer {settings.mistral_api_key}",
                     "Content-Type": "application/json"
                 }
                 payload = {
@@ -409,14 +401,14 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 async with self._http_session.post(url, headers=headers, json=payload) as resp:
                     if resp.status != 200:
                         error = await resp.text()
-                        logger.warning(f"Cerebras model {model} failed: {error[:200]}")
+                        logger.warning(f"Mistral model {model} failed: {error[:200]}")
                         last_error = error
                         continue
                     
                     # Success! Track and stream
-                    self.last_used_provider = "cerebras"
+                    self.last_used_provider = "mistral"
                     self.last_used_model = model
-                    logger.info(f"✅ Using Cerebras model: {model}")
+                    logger.info(f"✅ Using Mistral model: {model}")
                     
                     async for line in resp.content:
                         line = line.decode('utf-8').strip()
@@ -431,89 +423,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                     return
                     
             except Exception as e:
-                logger.warning(f"Cerebras model {model} error: {e}")
+                logger.warning(f"Mistral model {model} error: {e}")
                 last_error = str(e)
                 continue
         
-        raise Exception(f"All Cerebras models failed. Last error: {last_error}")
-    
-    async def _stream_cohere(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Cohere (FREE tier available)"""
-        if not settings.cohere_api_key:
-            raise Exception("Cohere API key not configured")
-        
-        # Cohere models to try
-        cohere_models = ["command-r-plus-08-2024", "command-r-08-2024", "command-a-03-2025"]
-        
-        # Convert messages to Cohere format
-        system_message = ""
-        chat_history = []
-        user_message = ""
-        
-        for msg in messages:
-            if msg["role"] == "system":
-                system_message += msg["content"] + "\n"
-            elif msg["role"] == "user":
-                if user_message:
-                    chat_history.append({"role": "USER", "message": user_message})
-                user_message = msg["content"]
-            elif msg["role"] == "assistant":
-                chat_history.append({"role": "CHATBOT", "message": msg["content"]})
-        
-        last_error = None
-        for model in cohere_models:
-            try:
-                logger.info(f"Trying Cohere model: {model}")
-                
-                url = "https://api.cohere.ai/v1/chat"
-                headers = {
-                    "Authorization": f"Bearer {settings.cohere_api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model,
-                    "message": user_message,
-                    "preamble": system_message.strip() if system_message else None,
-                    "chat_history": chat_history if chat_history else None,
-                    "max_tokens": settings.max_tokens,
-                    "temperature": settings.temperature,
-                    "stream": True
-                }
-                
-                # Remove None values
-                payload = {k: v for k, v in payload.items() if v is not None}
-                
-                async with self._http_session.post(url, headers=headers, json=payload) as resp:
-                    if resp.status != 200:
-                        error = await resp.text()
-                        logger.warning(f"Cohere model {model} failed: {error[:200]}")
-                        last_error = error
-                        continue
-                    
-                    # Success! Track and stream
-                    self.last_used_provider = "cohere"
-                    self.last_used_model = model
-                    logger.info(f"✅ Using Cohere model: {model}")
-                    
-                    async for line in resp.content:
-                        line = line.decode('utf-8').strip()
-                        if line:
-                            try:
-                                data = json.loads(line)
-                                if data.get('event_type') == 'text-generation':
-                                    text = data.get('text', '')
-                                    if text:
-                                        yield text
-                            except json.JSONDecodeError:
-                                continue
-                    return
-                    
-            except Exception as e:
-                logger.warning(f"Cohere model {model} error: {e}")
-                last_error = str(e)
-                continue
-        
-        raise Exception(f"All Cohere models failed. Last error: {last_error}")
+        raise Exception(f"All Mistral models failed. Last error: {last_error}")
     
     async def shutdown(self):
         """Cleanup resources"""

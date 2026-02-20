@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAppStore, OperatingMode, AIProvider } from "../../store/appStore";
+import { useAppStore } from "../../store/appStore";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import {
   Search,
@@ -13,8 +13,6 @@ import {
   MicOff,
   Monitor,
   Settings,
-  Moon,
-  Sun,
   Pause,
   Play,
   Brain,
@@ -26,7 +24,6 @@ import {
   Zap,
   Sparkles,
   Cpu,
-  MessageSquare,
   History,
   Trash2,
   HelpCircle,
@@ -223,26 +220,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
         category: "ai",
       },
       {
-        id: "ai-cerebras",
-        label: "Use Cerebras",
-        description: "Fast AI chip inference (FREE)",
+        id: "ai-mistral",
+        label: "Use Mistral",
+        description: "Mistral Large & Small models",
         icon: <Cpu className="w-4 h-4 text-purple-400" />,
         action: () => {
-          setAIProvider("cerebras");
-          setAIProviderBackend("cerebras");
-          toast.success("Switched to Cerebras");
-        },
-        category: "ai",
-      },
-      {
-        id: "ai-cohere",
-        label: "Use Cohere",
-        description: "Enterprise AI (FREE tier)",
-        icon: <MessageSquare className="w-4 h-4 text-green-400" />,
-        action: () => {
-          setAIProvider("cohere");
-          setAIProviderBackend("cohere");
-          toast.success("Switched to Cohere");
+          setAIProvider("mistral");
+          setAIProviderBackend("mistral");
+          toast.success("Switched to Mistral");
         },
         category: "ai",
       },
