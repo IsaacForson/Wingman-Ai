@@ -84,6 +84,9 @@ interface SettingsState {
   streamResponses: boolean
   setStreamResponses: (value: boolean) => void
   
+  autoScrollAnswers: boolean
+  setAutoScrollAnswers: (value: boolean) => void
+  
   // API Keys (stored securely)
   apiKeys: {
     openai?: string
@@ -172,6 +175,7 @@ const defaultSettings = {
   temperature: 0.7,
   maxTokens: 2048,
   streamResponses: true,
+  autoScrollAnswers: false,
   apiKeys: {},
   ollamaBaseUrl: 'http://localhost:11434',
   
@@ -291,6 +295,8 @@ export const useSettingsStore = create<SettingsState>()(
       
       setStreamResponses: (value) => set({ streamResponses: value }),
       
+      setAutoScrollAnswers: (value) => set({ autoScrollAnswers: value }),
+      
       setAPIKey: (provider, key) => {
         set((state) => ({
           apiKeys: { ...state.apiKeys, [provider]: key }
@@ -398,6 +404,7 @@ export const useSettingsStore = create<SettingsState>()(
         temperature: state.temperature,
         maxTokens: state.maxTokens,
         streamResponses: state.streamResponses,
+        autoScrollAnswers: state.autoScrollAnswers,
         apiKeys: state.apiKeys,
         ollamaBaseUrl: state.ollamaBaseUrl,
         theme: state.theme,

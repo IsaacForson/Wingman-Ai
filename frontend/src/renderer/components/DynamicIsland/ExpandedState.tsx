@@ -32,6 +32,7 @@ import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
 import { ModeSelector } from '../ModeSelector'
 import socketService from '../../services/socket'
+import { useSettingsStore } from '../../store/settingsStore'
 
 // Available programming languages for conversion
 const PROGRAMMING_LANGUAGES = [
@@ -77,13 +78,15 @@ const ExpandedState = () => {
   const [copied, setCopied] = useState(false)
   const [showAISelector, setShowAISelector] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  
+  const { autoScrollAnswers } = useSettingsStore()
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive (only if enabled)
   useEffect(() => {
-    if (scrollRef.current) {
+    if (autoScrollAnswers && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [answerHistory, currentAnswer])
+  }, [answerHistory, currentAnswer, autoScrollAnswers])
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)

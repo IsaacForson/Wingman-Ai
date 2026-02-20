@@ -368,6 +368,7 @@ const AISettings: React.FC = () => {
     temperature, setTemperature,
     maxTokens, setMaxTokens,
     streamResponses, setStreamResponses,
+    autoScrollAnswers, setAutoScrollAnswers,
   } = useSettingsStore();
 
   const providerModels: Record<string, { value: string; label: string }[]> = {
@@ -454,6 +455,12 @@ const AISettings: React.FC = () => {
           description="Show responses as they're generated (smoother)"
           value={streamResponses}
           onChange={setStreamResponses}
+        />
+        <ToggleSetting
+          label="Auto-scroll while generating"
+          description="Automatically scroll to bottom as answers are generated"
+          value={autoScrollAnswers}
+          onChange={setAutoScrollAnswers}
         />
       </SettingsSection>
     </div>
