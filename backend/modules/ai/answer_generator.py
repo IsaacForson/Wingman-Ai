@@ -1,7 +1,7 @@
 """
 Wingman AI - Answer Generator
 AI-powered answer generation with streaming support
-Supports: Groq, Gemini, Mistral
+Supports: Groq, Gemini, Mistral, Claude
 """
 
 from typing import Optional, AsyncGenerator, Dict, Any, Literal, Tuple
@@ -13,7 +13,7 @@ from config import settings
 
 
 # Provider type
-AIProvider = Literal["groq", "gemini", "mistral"]
+AIProvider = Literal["groq", "gemini", "mistral", "claude"]
 
 # Model configurations for each provider
 PROVIDER_MODELS = {
@@ -31,6 +31,11 @@ PROVIDER_MODELS = {
         "default": "mistral-large-latest",
         "fallback": "mistral-small-latest",
         "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "open-mistral-7b"]
+    },
+    "claude": {
+        "default": "claude-sonnet-4-20250514",
+        "fallback": "claude-3-5-haiku-20241022",
+        "models": ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"]
     }
 }
 
@@ -82,6 +87,8 @@ class AnswerGenerator:
             available.append("gemini")
         if settings.mistral_api_key:
             available.append("mistral")
+        if settings.anthropic_api_key:
+            available.append("claude")
         
         return available
     
@@ -234,7 +241,8 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         provider_methods = {
             "groq": self._stream_groq,
             "gemini": self._stream_gemini,
-            "mistral": self._stream_mistral
+            "mistral": self._stream_mistral,
+            "claude": self._stream_claude
         }
         
         # Try primary provider
@@ -247,7 +255,7 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 logger.error(f"{self.provider} error: {e}")
         
         # Try fallback providers
-        fallback_order = ["groq", "gemini", "mistral"]
+        fallback_order = ["groq", "gemini", "mistral", "claude"]
         for fallback in fallback_order:
             if fallback != self.provider and fallback in self.get_available_providers():
                 try:
@@ -428,6 +436,80 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 continue
         
         raise Exception(f"All Mistral models failed. Last error: {last_error}")
+    
+    async def _stream_claude(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from Anthropic Claude"""
+        if not settings.anthropic_api_key:
+            raise Exception("Anthropic API key not configured")
+        
+        # Claude models to try
+        claude_models = ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"]
+        
+        # Convert messages to Claude format (separate system from messages)
+        system_content = ""
+        claude_messages = []
+        
+        for msg in messages:
+            if msg["role"] == "system":
+                system_content += msg["content"] + "\n"
+            else:
+                claude_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+        
+        last_error = None
+        for model in claude_models:
+            try:
+                logger.info(f"Trying Claude model: {model}")
+                
+                url = "https://api.anthropic.com/v1/messages"
+                headers = {
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": claude_messages,
+                    "max_tokens": settings.max_tokens,
+                    "stream": True
+                }
+                
+                if system_content.strip():
+                    payload["system"] = system_content.strip()
+                
+                async with self._http_session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        error = await resp.text()
+                        logger.warning(f"Claude model {model} failed: {error[:200]}")
+                        last_error = error
+                        continue
+                    
+                    # Success! Track and stream
+                    self.last_used_provider = "claude"
+                    self.last_used_model = model
+                    logger.info(f"✅ Using Claude model: {model}")
+                    
+                    async for line in resp.content:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith('data: '):
+                            try:
+                                data = json.loads(line[6:])
+                                if data.get('type') == 'content_block_delta':
+                                    text = data.get('delta', {}).get('text', '')
+                                    if text:
+                                        yield text
+                            except json.JSONDecodeError:
+                                continue
+                    return
+                    
+            except Exception as e:
+                logger.warning(f"Claude model {model} error: {e}")
+                last_error = str(e)
+                continue
+        
+        raise Exception(f"All Claude models failed. Last error: {last_error}")
     
     async def shutdown(self):
         """Cleanup resources"""

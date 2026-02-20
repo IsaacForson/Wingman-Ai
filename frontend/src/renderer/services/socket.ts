@@ -123,6 +123,26 @@ class SocketService {
   setAIProvider(provider: string, model?: string): void {
     this.emit('set_ai_provider', { provider, model })
   }
+
+  convertCode(code: string, fromLanguage: string, toLanguage: string, callback: (convertedCode: string) => void): void {
+    if (!this.socket?.connected) {
+      callback('')
+      return
+    }
+
+    // Set up one-time listener for the response
+    const responseHandler = (data: { converted_code: string; success: boolean; error?: string }) => {
+      if (data.success) {
+        callback(data.converted_code)
+      } else {
+        console.error('[Socket] Code conversion failed:', data.error)
+        callback('')
+      }
+    }
+
+    this.socket.once('code_converted', responseHandler)
+    this.emit('convert_code', { code, from_language: fromLanguage, to_language: toLanguage })
+  }
 }
 
 export const socketService = SocketService.getInstance()

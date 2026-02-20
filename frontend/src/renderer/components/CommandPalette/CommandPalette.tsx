@@ -231,6 +231,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
         },
         category: "ai",
       },
+      {
+        id: "ai-claude",
+        label: "Use Claude",
+        description: "Anthropic Claude (Paid)",
+        icon: <Brain className="w-4 h-4 text-amber-400" />,
+        action: () => {
+          setAIProvider("claude");
+          setAIProviderBackend("claude");
+          toast.success("Switched to Claude");
+        },
+        category: "ai",
+      },
 
       // Navigation
       {

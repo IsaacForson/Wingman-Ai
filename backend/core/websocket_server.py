@@ -225,6 +225,71 @@ class WebSocketManager:
             from config import settings
             settings.ollama_base_url = url
             logger.info(f"Ollama URL set to {url}")
+        
+        @self.sio.event
+        async def convert_code(sid, data):
+            """Convert code from one language to another"""
+            code = data.get("code", "")
+            from_lang = data.get("from_language", "")
+            to_lang = data.get("to_language", "")
+            
+            logger.info(f"Code conversion requested: {from_lang} -> {to_lang}")
+            
+            from main import engine
+            if engine and engine._ai_module:
+                try:
+                    generator = engine._ai_module.answer_generator
+                    
+                    # Create a prompt for code conversion
+                    conversion_prompt = f"""Convert the following {from_lang} code to {to_lang}. 
+Only output the converted code, no explanations or markdown formatting.
+Keep the same logic and functionality.
+
+{from_lang} code:
+```{from_lang}
+{code}
+```
+
+Output only the {to_lang} code:"""
+                    
+                    # Generate the converted code
+                    converted_code = await generator.generate(
+                        question=conversion_prompt,
+                        context="",
+                        mode="work"
+                    )
+                    
+                    # Clean up the response (remove markdown code blocks if present)
+                    converted_code = converted_code.strip()
+                    if converted_code.startswith("```"):
+                        lines = converted_code.split("\n")
+                        # Remove first line (```language) and last line (```)
+                        if lines[-1].strip() == "```":
+                            lines = lines[1:-1]
+                        else:
+                            lines = lines[1:]
+                        converted_code = "\n".join(lines)
+                    
+                    await self.sio.emit("code_converted", {
+                        "success": True,
+                        "converted_code": converted_code,
+                        "from_language": from_lang,
+                        "to_language": to_lang
+                    }, room=sid)
+                    
+                except Exception as e:
+                    logger.error(f"Code conversion failed: {e}")
+                    await self.sio.emit("code_converted", {
+                        "success": False,
+                        "error": str(e),
+                        "converted_code": ""
+                    }, room=sid)
+            else:
+                await self.sio.emit("code_converted", {
+                    "success": False,
+                    "error": "AI engine not available",
+                    "converted_code": ""
+                }, room=sid)
     
     def _setup_event_forwarding(self):
         """Forward internal events to connected clients"""

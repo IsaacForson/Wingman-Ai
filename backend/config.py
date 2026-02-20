@@ -29,11 +29,12 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY")
     google_api_key: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
     mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
+    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")  # For Whisper transcription fallback
     elevenlabs_api_key: Optional[str] = Field(default=None, env="ELEVENLABS_API_KEY")
     
     # AI Model Settings
-    # Provider options: groq, gemini, mistral
+    # Provider options: groq, gemini, mistral, claude
     ai_provider: str = Field(default="groq", env="AI_PROVIDER")
     default_model: str = Field(default="llama-3.3-70b-versatile", env="DEFAULT_MODEL")
     fallback_model: str = Field(default="llama-3.1-8b-instant", env="FALLBACK_MODEL")

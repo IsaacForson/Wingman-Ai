@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../../store/appStore'
 import { 
   X, 
@@ -21,7 +21,10 @@ import {
   Zap,
   User,
   Bot,
-  Trash2
+  Trash2,
+  Code2,
+  ChevronDown,
+  Loader2
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -29,6 +32,30 @@ import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
 import { ModeSelector } from '../ModeSelector'
 import socketService from '../../services/socket'
+
+// Available programming languages for conversion
+const PROGRAMMING_LANGUAGES = [
+  { value: 'python', label: 'Python' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'java', label: 'Java' },
+  { value: 'csharp', label: 'C#' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'c', label: 'C' },
+  { value: 'go', label: 'Go' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'swift', label: 'Swift' },
+  { value: 'kotlin', label: 'Kotlin' },
+  { value: 'ruby', label: 'Ruby' },
+  { value: 'php', label: 'PHP' },
+  { value: 'scala', label: 'Scala' },
+  { value: 'r', label: 'R' },
+  { value: 'dart', label: 'Dart' },
+  { value: 'lua', label: 'Lua' },
+  { value: 'perl', label: 'Perl' },
+  { value: 'haskell', label: 'Haskell' },
+  { value: 'elixir', label: 'Elixir' },
+]
 
 const ExpandedState = () => {
   const { 
@@ -381,45 +408,10 @@ const ChatMessage = ({ entry, onCopy, isLast }: ChatMessageProps) => {
                       const language = match ? match[1] : 'text'
                       
                       return (
-                        <div className="my-2 rounded-lg overflow-hidden bg-[#1a1a2e] border border-white/10">
-                          <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/10">
-                            <span className="text-xs text-wingman-400 font-mono uppercase">
-                              {language}
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(codeString)
-                                toast.success('Code copied')
-                              }}
-                              className="text-white/40 hover:text-white transition-colors"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <Highlight
-                            theme={themes.nightOwl}
-                            code={codeString}
-                            language={language}
-                          >
-                            {({ className: highlightClassName, style, tokens, getLineProps, getTokenProps }) => (
-                              <pre 
-                                className={`${highlightClassName} p-3 overflow-x-auto text-xs`}
-                                style={{ ...style, backgroundColor: 'transparent', margin: 0 }}
-                              >
-                                {tokens.map((line, i) => (
-                                  <div key={i} {...getLineProps({ line })} className="leading-relaxed">
-                                    <span className="inline-block w-8 text-white/20 select-none text-right pr-4">
-                                      {i + 1}
-                                    </span>
-                                    {line.map((token, key) => (
-                                      <span key={key} {...getTokenProps({ token })} />
-                                    ))}
-                                  </div>
-                                ))}
-                              </pre>
-                            )}
-                          </Highlight>
-                        </div>
+                        <CodeBlockWithLanguageSelector 
+                          code={codeString} 
+                          language={language} 
+                        />
                       )
                     },
                     ul: ({ children }) => (
@@ -469,6 +461,157 @@ const ChatMessage = ({ entry, onCopy, isLast }: ChatMessageProps) => {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Code block with language selector for conversion
+interface CodeBlockProps {
+  code: string
+  language: string
+}
+
+const CodeBlockWithLanguageSelector = ({ code, language }: CodeBlockProps) => {
+  const [isConverting, setIsConverting] = useState(false)
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false)
+  const [displayCode, setDisplayCode] = useState(code)
+  const [displayLanguage, setDisplayLanguage] = useState(language)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowLanguageMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleLanguageConvert = async (targetLang: string) => {
+    if (targetLang === displayLanguage) {
+      setShowLanguageMenu(false)
+      return
+    }
+
+    setIsConverting(true)
+    setShowLanguageMenu(false)
+
+    try {
+      const response = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout')), 30000)
+        
+        socketService.convertCode(displayCode, displayLanguage, targetLang, (convertedCode: string) => {
+          clearTimeout(timeout)
+          resolve(convertedCode)
+        })
+      })
+
+      setDisplayCode(response)
+      setDisplayLanguage(targetLang)
+      toast.success(`Converted to ${PROGRAMMING_LANGUAGES.find(l => l.value === targetLang)?.label || targetLang}`)
+    } catch {
+      toast.error('Failed to convert code. Please try again.')
+    } finally {
+      setIsConverting(false)
+    }
+  }
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(displayCode)
+    toast.success('Code copied')
+  }
+
+  return (
+    <div className="my-2 rounded-lg overflow-hidden bg-[#1a1a2e] border border-white/10">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/10">
+        {/* Language selector dropdown */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+            className="flex items-center gap-1.5 text-xs text-wingman-400 font-mono uppercase hover:text-wingman-300 transition-colors"
+            disabled={isConverting}
+          >
+            {isConverting ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Converting...</span>
+              </>
+            ) : (
+              <>
+                <Code2 className="w-3 h-3" />
+                <span>{displayLanguage}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${showLanguageMenu ? 'rotate-180' : ''}`} />
+              </>
+            )}
+          </button>
+
+          <AnimatePresence>
+            {showLanguageMenu && (
+              <motion.div
+                className="absolute left-0 top-full mt-1 w-40 max-h-60 overflow-y-auto rounded-lg bg-black/95 backdrop-blur-xl border border-white/10 shadow-xl z-50"
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+              >
+                <div className="p-1">
+                  <p className="px-2 py-1 text-[10px] text-white/40 uppercase tracking-wide">
+                    Convert to
+                  </p>
+                  {PROGRAMMING_LANGUAGES.map((lang) => (
+                    <button
+                      key={lang.value}
+                      onClick={() => handleLanguageConvert(lang.value)}
+                      className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                        displayLanguage === lang.value
+                          ? 'bg-wingman-500/20 text-wingman-300'
+                          : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {lang.label}
+                      {displayLanguage === lang.value && (
+                        <Check className="w-3 h-3 inline ml-2 text-wingman-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <button
+          onClick={handleCopyCode}
+          className="text-white/40 hover:text-white transition-colors"
+        >
+          <Copy className="w-3 h-3" />
+        </button>
+      </div>
+
+      <Highlight
+        theme={themes.nightOwl}
+        code={displayCode}
+        language={displayLanguage}
+      >
+        {({ className: highlightClassName, style, tokens, getLineProps, getTokenProps }) => (
+          <pre 
+            className={`${highlightClassName} p-3 overflow-x-auto text-xs`}
+            style={{ ...style, backgroundColor: 'transparent', margin: 0 }}
+          >
+            {tokens.map((line, i) => (
+              <div key={i} {...getLineProps({ line })} className="leading-relaxed">
+                <span className="inline-block w-8 text-white/20 select-none text-right pr-4">
+                  {i + 1}
+                </span>
+                {line.map((token, key) => (
+                  <span key={key} {...getTokenProps({ token })} />
+                ))}
+              </div>
+            ))}
+          </pre>
+        )}
+      </Highlight>
     </div>
   )
 }

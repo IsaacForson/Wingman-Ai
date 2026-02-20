@@ -389,6 +389,11 @@ const AISettings: React.FC = () => {
       { value: "mistral-small-latest", label: "Mistral Small (faster)" },
       { value: "open-mistral-7b", label: "Open Mistral 7B" },
     ],
+    claude: [
+      { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4 (recommended)" },
+      { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (faster)" },
+      { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+    ],
   };
 
   return (
@@ -402,6 +407,7 @@ const AISettings: React.FC = () => {
             { value: "groq", label: "🚀 Groq (FREE & Fast)" },
             { value: "gemini", label: "🔮 Google Gemini (FREE tier)" },
             { value: "mistral", label: "🌟 Mistral AI" },
+            { value: "claude", label: "🧠 Claude (Paid)" },
           ]}
           onChange={(v) => {
             setAIProvider(v as any);
@@ -463,6 +469,7 @@ const APIKeysSettings: React.FC = () => {
     { key: "groq", name: "Groq", url: "https://console.groq.com/keys", free: true },
     { key: "google", name: "Google AI (Gemini)", url: "https://aistudio.google.com/app/apikey", free: true },
     { key: "mistral", name: "Mistral AI", url: "https://console.mistral.ai/api-keys/", free: true },
+    { key: "anthropic", name: "Anthropic Claude", url: "https://console.anthropic.com/", free: false },
   ];
 
   return (
