@@ -21,6 +21,7 @@ from core.engine import WingmanEngine
 from core.websocket_server import create_socket_app, sio
 from core.event_bus import event_bus
 from core.health import router as health_router
+from core.security import LocalOriginGuard
 from modules.conversation import get_conversation_manager
 from modules.ai.answer_generator import PROVIDER_MODELS
 
@@ -111,6 +112,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Outermost: reject anything that isn't the Wingman app or the Chrome extension
+app.add_middleware(LocalOriginGuard, port=settings.port)
 
 # Include health check routes
 app.include_router(health_router, prefix="/api", tags=["Health"])

@@ -3,7 +3,7 @@
  * Handles window management, system tray, global hotkeys, and backend auto-start
  */
 
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage } from 'electron'
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
@@ -52,6 +52,18 @@ const WINDOW_CONFIG = {
   normal: { width: 420, height: 64 },
   expanded: { width: 600, height: 400 },
   fullscreen: { width: 900, height: 600 }
+}
+
+// The backend only accepts this Origin (plus the Chrome extension), so other websites can't use it.
+// Must match APP_ORIGIN in backend/core/security.py
+function stampBackendOrigin(): void {
+  const urls = ['http', 'ws'].flatMap((scheme) =>
+    ['127.0.0.1', 'localhost'].map((host) => `${scheme}://${host}:8765/*`)
+  )
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
+    details.requestHeaders['Origin'] = 'wingman-app://desktop'
+    callback({ requestHeaders: details.requestHeaders })
+  })
 }
 
 function createWindow(): void {
@@ -535,6 +547,7 @@ app.whenReady().then(async () => {
     await startBackend()
   }
   
+  stampBackendOrigin()
   createWindow()
   createTray()
   registerGlobalShortcuts()
