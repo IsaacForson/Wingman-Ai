@@ -22,6 +22,7 @@ export interface WingmanAPI {
   setHideFromScreenCapture: (hide: boolean) => Promise<void>
   setHotkey: (action: string, keys: string) => Promise<boolean>
   captureScreenshot: () => Promise<{ image?: string; error?: string }>
+  openScreenRecordingSettings: () => Promise<void>
   
   // App control
   quitApp: () => Promise<void>
@@ -63,6 +64,7 @@ contextBridge.exposeInMainWorld('wingman', {
   setHideFromScreenCapture: (hide: boolean) => ipcRenderer.invoke('set-hide-from-screen-capture', hide),
   setHotkey: (action: string, keys: string) => ipcRenderer.invoke('set-hotkey', action, keys),
   captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
+  openScreenRecordingSettings: () => ipcRenderer.invoke('open-screen-recording-settings'),
   
   // App control
   quitApp: () => ipcRenderer.invoke('quit-app'),

@@ -74,8 +74,8 @@ class SystemAudioCapture:
         content, error = _wait(SCK.SCShareableContent.getShareableContentWithCompletionHandler_)
         if error is not None or content is None or not content.displays():
             raise SystemAudioUnavailable(
-                "Allow Wingman AI under System Settings → Privacy & Security → "
-                "Screen & System Audio Recording, then restart Wingman"
+                "Screen & System Audio Recording is off for this copy of Wingman. Remove old Wingman AI "
+                "entries (−), add this one (+) or switch it on, then quit and reopen Wingman"
             )
 
         content_filter = SCK.SCContentFilter.alloc().initWithDisplay_excludingWindows_(content.displays()[0], [])

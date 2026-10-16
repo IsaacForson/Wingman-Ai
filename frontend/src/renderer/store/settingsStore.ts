@@ -477,7 +477,7 @@ export async function requestScreenshot() {
     return
   }
   if (result.error || !result.image) {
-    toast.error(result.error || 'Screenshot failed', { duration: 6000 })
+    toast.error(result.error || 'Screenshot failed', { duration: 10000 })
     return
   }
   const { activeConversationId, mode, setProcessing } = useAppStore.getState()

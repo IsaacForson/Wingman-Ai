@@ -3,7 +3,7 @@
  * Handles window management, system tray, global hotkeys, and backend auto-start
  */
 
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage, session, desktopCapturer, systemPreferences } from 'electron'
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage, session, desktopCapturer, systemPreferences, dialog, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
@@ -64,6 +64,15 @@ function stampBackendOrigin(): void {
     details.requestHeaders['Origin'] = 'wingman-app://desktop'
     callback({ requestHeaders: details.requestHeaders })
   })
+}
+
+// Unsigned builds: macOS treats every rebuild/copy as a new app, so an old "on" toggle doesn't count
+const SCREEN_PERMISSION_HELP =
+  'Screen Recording is off for this copy of Wingman. In the settings window that just opened, remove any old ' +
+  'Wingman AI entries (−), add this one (+) or switch it on, then quit and reopen Wingman.'
+
+function openScreenRecordingSettings(): void {
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
 }
 
 function createWindow(): void {
@@ -398,7 +407,8 @@ function setupIPC(): void {
       const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
       // Without permission macOS hands back only the wallpaper, so check after asking
       if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
-        return { error: 'Allow Wingman AI in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Wingman' }
+        openScreenRecordingSettings()
+        return { error: SCREEN_PERMISSION_HELP }
       }
       const source = sources.find((s) => s.display_id === String(display.id)) || sources[0]
       if (!source || source.thumbnail.isEmpty()) return { error: 'Could not capture the screen' }
@@ -407,6 +417,9 @@ function setupIPC(): void {
       return { error: `Screenshot failed: ${err}` }
     }
   })
+
+  // Backend asks for this when computer audio has no permission
+  ipcMain.handle('open-screen-recording-settings', () => openScreenRecordingSettings())
 
   // Hotkey customization
   ipcMain.handle('set-hotkey', (_, action: string, keys: string) => setHotkey(action, keys))
@@ -469,8 +482,11 @@ async function startBackend(): Promise<boolean> {
           }
         }
         
+        // Run from a writable folder: the app bundle can be read-only (opened from the DMG)
+        const dataDir = path.join(app.getPath('userData'), 'backend')
+        fs.mkdirSync(dataDir, { recursive: true })
         backendProcess = spawn(executablePath, [], {
-          cwd: path.dirname(executablePath),
+          cwd: dataDir,
           env: { ...process.env },
           stdio: ['pipe', 'pipe', 'pipe']
         })
@@ -571,8 +587,30 @@ function stopBackend(): void {
 }
 
 // App lifecycle
+// Running from the DMG or a random folder breaks things (read-only, and macOS ties
+// Screen Recording permission to one copy), so offer to move into Applications once
+async function offerMoveToApplications(): Promise<void> {
+  if (process.platform !== 'darwin' || !app.isPackaged || app.isInApplicationsFolder()) return
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Move to Applications', 'Not Now'],
+    defaultId: 0,
+    message: 'Move Wingman AI to your Applications folder?',
+    detail: 'Wingman needs to run from Applications so its backend can start and macOS permissions (screenshots, computer audio) stick.'
+  })
+  if (response === 0) {
+    try {
+      app.moveToApplicationsFolder()  // relaunches from Applications
+    } catch (err) {
+      dialog.showErrorBox('Could not move Wingman AI', String(err))
+    }
+  }
+}
+
 app.whenReady().then(async () => {
   // Start backend first (in production)
+  await offerMoveToApplications()
+
   if (process.env.NODE_ENV !== 'development') {
     await startBackend()
   }

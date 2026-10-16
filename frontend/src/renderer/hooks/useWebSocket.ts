@@ -300,7 +300,11 @@ export function useWebSocket() {
     })
 
     socket.on('system_error', (data: { data?: { error?: string } }) => {
-      toast.error(data.data?.error || 'Something went wrong', { duration: 8000 })
+      const error = data.data?.error || 'Something went wrong'
+      if (error.includes('Screen & System Audio Recording')) {
+        window.wingman?.openScreenRecordingSettings?.()
+      }
+      toast.error(error, { duration: 10000 })
     })
 
   }, [
