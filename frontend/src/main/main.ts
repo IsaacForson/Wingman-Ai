@@ -205,39 +205,66 @@ function createTray(): void {
   })
 }
 
-function registerGlobalShortcuts(): void {
-  // Toggle visibility
-  globalShortcut.register('CommandOrControl+Shift+W', () => {
+// Global shortcut actions; the accelerators come from the Hotkeys settings
+const hotkeyActions: Record<string, () => void> = {
+  toggleVisibility: () => {
     if (mainWindow?.isVisible()) {
       mainWindow.hide()
     } else {
       mainWindow?.show()
       mainWindow?.focus()
     }
-  })
-
-  // Command palette
-  globalShortcut.register('CommandOrControl+Space', () => {
+  },
+  commandPalette: () => {
     mainWindow?.show()
     mainWindow?.focus()
     mainWindow?.webContents.send('open-command-palette')
-  })
-
-  // Toggle pause
-  globalShortcut.register('CommandOrControl+Shift+P', () => {
-    mainWindow?.webContents.send('toggle-pause')
-  })
-
-  // Capture screen
-  globalShortcut.register('CommandOrControl+Shift+S', () => {
-    mainWindow?.webContents.send('capture-screen')
-  })
-
+  },
+  pauseResume: () => mainWindow?.webContents.send('toggle-pause'),
+  captureScreen: () => mainWindow?.webContents.send('capture-screen'),
   // Emergency hide (kill switch)
-  globalShortcut.register('CommandOrControl+Shift+Escape', () => {
+  emergencyHide: () => {
     mainWindow?.hide()
     mainWindow?.webContents.send('emergency-hide')
-  })
+  },
+  startListening: () => mainWindow?.webContents.send('start-listening'),
+  stopListening: () => mainWindow?.webContents.send('stop-listening'),
+}
+
+const hotkeys: Record<string, string> = {
+  toggleVisibility: 'CommandOrControl+Shift+W',
+  commandPalette: 'CommandOrControl+Space',
+  pauseResume: 'CommandOrControl+Shift+P',
+  captureScreen: 'CommandOrControl+Shift+S',
+  emergencyHide: 'CommandOrControl+Shift+Escape',
+  startListening: 'CommandOrControl+Shift+L',
+  stopListening: 'CommandOrControl+Shift+K',
+}
+
+function registerGlobalShortcuts(): void {
+  for (const [action, keys] of Object.entries(hotkeys)) {
+    try {
+      globalShortcut.register(keys, hotkeyActions[action])
+    } catch (err) {
+      console.error(`Could not register ${keys} for ${action}:`, err)
+    }
+  }
+}
+
+// Rebind one action. Returns false (and keeps the old binding) if the keys are taken or invalid.
+function setHotkey(action: string, keys: string): boolean {
+  const handler = hotkeyActions[action]
+  if (!handler) return false
+  const old = hotkeys[action]
+  if (old === keys) return true
+  try {
+    if (!globalShortcut.register(keys, handler)) return false
+  } catch {
+    return false
+  }
+  if (old) globalShortcut.unregister(old)
+  hotkeys[action] = keys
+  return true
 }
 
 function setupIPC(): void {
@@ -343,19 +370,8 @@ function setupIPC(): void {
     console.log(`Hide from screen capture: ${hide}`)
   })
 
-  // Island position (for future use - currently handled by drag)
-  ipcMain.handle('set-island-position', (_, position: string) => {
-    console.log(`Island position set to: ${position}`)
-    // Position is currently handled by drag in the renderer
-    // This could be used to set a default position on startup
-  })
-
-  // Hotkey customization (for future use)
-  ipcMain.handle('set-hotkey', (_, action: string, keys: string) => {
-    console.log(`Hotkey for ${action}: ${keys}`)
-    // Hotkey customization to be implemented in future
-    // Would require unregistering old shortcut and registering new one
-  })
+  // Hotkey customization
+  ipcMain.handle('set-hotkey', (_, action: string, keys: string) => setHotkey(action, keys))
 
   // Quit app
   ipcMain.handle('quit-app', () => {

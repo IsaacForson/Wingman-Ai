@@ -5,7 +5,8 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/appStore";
-import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings } from "lucide-react";
+import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings, ScanText } from "lucide-react";
+import { requestCapture } from "../../store/settingsStore";
 import socketService from "../../services/socket";
 import { ModeSelector } from "../ModeSelector";
 
@@ -105,7 +106,7 @@ const NormalState = () => {
         ) : isListening ? (
           <p className="text-sm text-white/60">Listening... speak now</p>
         ) : (
-          <p className="text-sm text-white/60">Click mic to start listening</p>
+          <p className="text-sm text-white/60">Click mic to listen, or open to type</p>
         )}
       </div>
 
@@ -116,6 +117,19 @@ const NormalState = () => {
           <ModeSelector compact />
         </div>
         
+        {/* Capture screen via the Chrome extension */}
+        <button
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            requestCapture();
+          }}
+          title="Capture screen (⌘+Shift+S)"
+          aria-label="Capture screen"
+        >
+          <ScanText className="w-3.5 h-3.5 text-white/50 hover:text-white/80" />
+        </button>
+
         {/* Settings button */}
         <button
           className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"

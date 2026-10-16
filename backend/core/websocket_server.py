@@ -23,6 +23,57 @@ sio = socketio.AsyncServer(
 )
 
 
+async def apply_settings(data: Dict[str, Any]):
+    """Apply frontend settings to the running engine. Every field is optional."""
+    from main import engine
+    from modules.conversation import get_conversation_manager
+    
+    for provider, key in (data.get("apiKeys") or {}).items():
+        if not key:
+            continue  # blank field = keep the key from .env
+        if provider == "groq":
+            settings.groq_api_key = key
+        elif provider == "nvidia":
+            settings.nvidia_api_keys = key
+        elif provider == "openai":
+            settings.openai_api_key = key
+        logger.info(f"API key updated for {provider}")
+    
+    if "temperature" in data:
+        settings.temperature = float(data["temperature"])
+    if "maxTokens" in data:
+        settings.max_tokens = int(data["maxTokens"])
+    if "saveSessionHistory" in data:
+        get_conversation_manager().persist = bool(data["saveSessionHistory"])
+    
+    if not engine:
+        return
+    
+    if engine._ai_module:
+        generator = engine._ai_module.answer_generator
+        if data.get("aiProvider"):
+            generator.set_provider(data["aiProvider"])
+        if data.get("aiModel"):
+            generator.default_model = data["aiModel"]
+    
+    audio = engine._audio_module
+    if audio:
+        if "inputDevice" in data and audio.capture:
+            device = data["inputDevice"]
+            # Takes effect the next time listening starts
+            audio.capture.device = None if device in (None, "", "default") else int(device)
+        if "vadSensitivity" in data and audio.vad:
+            audio.vad.set_aggressiveness(int(data["vadSensitivity"]))
+        if "silenceThreshold" in data:
+            audio.silence_ms = int(data["silenceThreshold"])
+        model = data.get("whisperModel", settings.whisper_model)
+        use_local = data.get("useLocalWhisper", settings.use_local_whisper)
+        if model != settings.whisper_model or use_local != settings.use_local_whisper:
+            settings.whisper_model, settings.use_local_whisper = model, use_local
+            # Loading a local Whisper model can take a while; don't block the socket
+            asyncio.create_task(audio.reload_transcriber())
+
+
 class WebSocketManager:
     """Manages WebSocket connections and message routing"""
     
@@ -161,25 +212,25 @@ class WebSocketManager:
         
         @self.sio.event
         async def sync_settings(sid, data):
-            """Sync settings from frontend"""
-            logger.info(f"Settings sync from {sid}")
-            from main import engine
-            if engine and engine._ai_module:
-                generator = engine._ai_module.answer_generator
-                
-                # Update AI provider and model
-                if data.get("aiProvider"):
-                    generator.set_provider(data["aiProvider"])
-                if data.get("aiModel"):
-                    generator.default_model = data["aiModel"]
-                if data.get("temperature"):
-                    from config import settings
-                    settings.temperature = data["temperature"]
-                if data.get("maxTokens"):
-                    from config import settings
-                    settings.max_tokens = data["maxTokens"]
-                    
+            """Apply settings from the frontend (full sync or a single changed field)"""
+            logger.info(f"Settings sync from {sid}: {sorted(data.keys())}")
+            await apply_settings(data)
             await self.sio.emit("settings_synced", {"success": True}, room=sid)
+        
+        @self.sio.event
+        async def get_audio_devices(sid, data=None):
+            """List microphones the backend can record from (returned as an ack)"""
+            from modules.audio.capture import AudioCapture
+            return AudioCapture.list_devices()
+        
+        @self.sio.event
+        async def request_capture(sid, data=None):
+            """Ask the Chrome extension to capture the active tab"""
+            from main import request_extension_capture
+            if await request_extension_capture() == 0:
+                await self.sio.emit("capture_error", {
+                    "error": "Chrome extension not connected. Open Chrome and make sure the Wingman extension is enabled (reload it once after updating)."
+                }, room=sid)
         
         @self.sio.event
         async def set_temperature(sid, data):
@@ -200,31 +251,7 @@ class WebSocketManager:
         @self.sio.event
         async def set_api_key(sid, data):
             """Set API key for a provider"""
-            provider = data.get("provider")
-            key = data.get("key")
-            if provider and key:
-                from config import settings
-                if provider == "groq":
-                    settings.groq_api_key = key
-                elif provider == "openai":
-                    settings.openai_api_key = key
-                elif provider == "anthropic":
-                    settings.anthropic_api_key = key
-                elif provider == "google":
-                    settings.google_api_key = key
-                elif provider == "together":
-                    settings.together_api_key = key
-                elif provider == "huggingface":
-                    settings.huggingface_api_key = key
-                logger.info(f"API key updated for {provider}")
-        
-        @self.sio.event
-        async def set_ollama_url(sid, data):
-            """Set Ollama base URL"""
-            url = data.get("url", "http://localhost:11434")
-            from config import settings
-            settings.ollama_base_url = url
-            logger.info(f"Ollama URL set to {url}")
+            await apply_settings({"apiKeys": {data.get("provider"): data.get("key")}})
         
         @self.sio.event
         async def convert_code(sid, data):

@@ -5,13 +5,11 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAppStore, AIProvider } from '../../store/appStore'
+import { useAppStore, AIProvider, PROVIDER_MODELS } from '../../store/appStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { 
   Zap, 
-  Sparkles, 
   Cpu,
-  Brain,
   ChevronDown,
   Check
 } from 'lucide-react'
@@ -31,35 +29,13 @@ const PROVIDER_INFO: Record<AIProvider, {
     color: 'text-orange-400',
     isFree: true
   },
-  gemini: {
-    name: 'Google Gemini',
-    icon: <Sparkles className="w-4 h-4" />,
-    description: 'Google AI (FREE tier)',
-    color: 'text-blue-400',
-    isFree: true
-  },
-  mistral: {
-    name: 'Mistral AI',
+  nvidia: {
+    name: 'NVIDIA',
     icon: <Cpu className="w-4 h-4" />,
-    description: 'Mistral Large & Small models',
-    color: 'text-purple-400',
+    description: 'Automatic backup when Groq is busy (rotates keys)',
+    color: 'text-green-400',
     isFree: true
-  },
-  claude: {
-    name: 'Claude',
-    icon: <Brain className="w-4 h-4" />,
-    description: 'Anthropic Claude (Paid)',
-    color: 'text-amber-400',
-    isFree: false
   }
-}
-
-// Models for each provider
-const PROVIDER_MODELS: Record<AIProvider, string[]> = {
-  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
-  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
-  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'open-mistral-7b'],
-  claude: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022']
 }
 
 interface AIProviderSelectorProps {

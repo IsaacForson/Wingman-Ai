@@ -9,7 +9,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -22,6 +22,7 @@ from core.websocket_server import create_socket_app, sio
 from core.event_bus import event_bus
 from core.health import router as health_router
 from modules.conversation import get_conversation_manager
+from modules.ai.answer_generator import PROVIDER_MODELS
 
 
 # Configure logging
@@ -162,15 +163,8 @@ async def get_ai_providers():
             "current_provider": generator.provider,
             "current_model": generator.default_model,
             "available_providers": generator.get_available_providers(),
-            "provider_models": {
-                "openai": ["gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"],
-                "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
-                "groq": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-                "gemini": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
-                "together": ["meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"],
-                "huggingface": ["meta-llama/Meta-Llama-3-8B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2"],
-                "ollama": ["llama3.2", "llama3.1", "mistral", "codellama", "phi3"]
-            }
+            "provider_models": {p: m["models"] for p, m in PROVIDER_MODELS.items()},
+            "nvidia_key_count": len(settings.nvidia_keys)
         }
     return {"error": "Engine not initialized"}
 
@@ -267,8 +261,9 @@ Answer:"""
         
         full_answer = "".join(answer_chunks)
         
-        used_provider = generator.provider
-        used_model = generator.default_model
+        # Report what actually answered (may be the NVIDIA backup)
+        used_provider = generator.last_used_provider or generator.provider
+        used_model = generator.last_used_model or generator.default_model
         
         # Restore original provider if we switched
         if request.provider and original_provider != request.provider:
@@ -299,6 +294,41 @@ Answer:"""
     except Exception as e:
         logger.error(f"❌ Analysis error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Chrome extension capture trigger
+# The extension keeps this socket open so the desktop app can ask it to capture
+# ============================================
+
+extension_sockets: set[WebSocket] = set()
+
+
+@app.websocket("/ws/extension")
+async def extension_socket(ws: WebSocket):
+    await ws.accept()
+    extension_sockets.add(ws)
+    logger.info(f"🧩 Chrome extension connected ({len(extension_sockets)} open)")
+    try:
+        while True:
+            await ws.receive_text()  # keepalive pings from the extension
+    except Exception:
+        pass
+    finally:
+        extension_sockets.discard(ws)
+        logger.info("🧩 Chrome extension disconnected")
+
+
+async def request_extension_capture() -> int:
+    """Ask every connected extension to capture its active tab. Returns how many were asked."""
+    sent = 0
+    for ws in list(extension_sockets):
+        try:
+            await ws.send_text("capture")
+            sent += 1
+        except Exception:
+            extension_sockets.discard(ws)
+    return sent
 
 
 @app.get("/api/test-extension")
@@ -476,8 +506,9 @@ async def analyze_conversational(request: ConversationalAnalyzeRequest):
         # Add assistant response to conversation
         conv_manager.add_message("assistant", full_answer, conv.id)
         
-        used_provider = generator.provider
-        used_model = generator.default_model
+        # Report what actually answered (may be the NVIDIA backup)
+        used_provider = generator.last_used_provider or generator.provider
+        used_model = generator.last_used_model or generator.default_model
         
         # Restore original provider
         if request.provider and original_provider != request.provider:

@@ -21,7 +21,9 @@ import {
   ExternalLink,
   Trash2,
 } from "lucide-react";
-import { useSettingsStore } from "../../store/settingsStore";
+import { useSettingsStore, HotkeyAction } from "../../store/settingsStore";
+import { AIProvider, PROVIDER_MODELS } from "../../store/appStore";
+import socketService from "../../services/socket";
 import toast from "react-hot-toast";
 
 type SettingsTab =
@@ -152,7 +154,6 @@ const GeneralSettings: React.FC = () => {
     launchAtStartup, setLaunchAtStartup,
     alwaysOnTop, setAlwaysOnTop,
     showInDock, setShowInDock,
-    minimizeToTray, setMinimizeToTray,
     soundEffects, setSoundEffects,
     desktopNotifications, setDesktopNotifications,
   } = useSettingsStore();
@@ -178,24 +179,18 @@ const GeneralSettings: React.FC = () => {
           value={showInDock}
           onChange={setShowInDock}
         />
-        <ToggleSetting
-          label="Minimize to tray"
-          description="Keep running in system tray when closed"
-          value={minimizeToTray}
-          onChange={setMinimizeToTray}
-        />
       </SettingsSection>
 
       <SettingsSection title="Notifications">
         <ToggleSetting
           label="Sound effects"
-          description="Play sounds for events and actions"
+          description="Play a short chime when an answer is ready (your mic may pick it up)"
           value={soundEffects}
           onChange={setSoundEffects}
         />
         <ToggleSetting
           label="Desktop notifications"
-          description="Show system notifications for important events"
+          description="Show a system notification when an answer is ready while Wingman is hidden"
           value={desktopNotifications}
           onChange={setDesktopNotifications}
         />
@@ -219,11 +214,11 @@ const AudioSettings: React.FC = () => {
     silenceThreshold, setSilenceThreshold,
   } = useSettingsStore();
 
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [devices, setDevices] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
-    navigator.mediaDevices?.enumerateDevices().then((deviceList) => {
-      setDevices(deviceList.filter((d) => d.kind === "audioinput"));
+    socketService.getSocket()?.emit("get_audio_devices", null, (list: { id: number; name: string }[]) => {
+      setDevices(list || []);
     });
   }, []);
 
@@ -232,14 +227,11 @@ const AudioSettings: React.FC = () => {
       <SettingsSection title="Input Device">
         <SelectSetting
           label="Microphone"
-          description="Select which microphone to use for listening"
+          description="Microphone to listen with (applies next time you start listening)"
           value={inputDevice}
           options={[
             { value: "default", label: "System Default" },
-            ...devices.map((d) => ({
-              value: d.deviceId,
-              label: d.label || `Microphone ${d.deviceId.slice(0, 8)}`,
-            })),
+            ...devices.map((d) => ({ value: String(d.id), label: d.name })),
           ]}
           onChange={setInputDevice}
         />
@@ -248,7 +240,7 @@ const AudioSettings: React.FC = () => {
       <SettingsSection title="Voice Detection">
         <SliderSetting
           label="VAD Sensitivity"
-          description="Higher values detect quieter speech (0 = least sensitive, 3 = most)"
+          description="How strictly background noise is filtered out (0 = lenient, 3 = strict)"
           value={vadSensitivity}
           min={0}
           max={3}
@@ -256,7 +248,7 @@ const AudioSettings: React.FC = () => {
         />
         <SliderSetting
           label="Silence threshold"
-          description="Milliseconds of silence before ending speech"
+          description="Milliseconds of silence before your question is sent"
           value={silenceThreshold}
           min={200}
           max={2000}
@@ -265,7 +257,7 @@ const AudioSettings: React.FC = () => {
         />
         <ToggleSetting
           label="Auto-start listening"
-          description="Begin listening automatically when app starts"
+          description="Begin listening automatically when the app connects"
           value={autoStartListening}
           onChange={setAutoStartListening}
         />
@@ -274,7 +266,7 @@ const AudioSettings: React.FC = () => {
       <SettingsSection title="Transcription">
         <SelectSetting
           label="Whisper Model"
-          description="Larger models are more accurate but slower"
+          description="Used by local Whisper. Larger = more accurate but slower"
           value={whisperModel}
           options={[
             { value: "tiny", label: "Tiny (fastest, less accurate)" },
@@ -287,7 +279,7 @@ const AudioSettings: React.FC = () => {
         />
         <ToggleSetting
           label="Use local Whisper"
-          description="Run transcription locally instead of cloud API (requires more resources)"
+          description="Transcribe on this Mac instead of Groq's cloud Whisper (downloads the model on first use)"
           value={useLocalWhisper}
           onChange={setUseLocalWhisper}
         />
@@ -298,63 +290,21 @@ const AudioSettings: React.FC = () => {
 
 // Screen Settings
 const ScreenSettings: React.FC = () => {
-  const {
-    enableScreenCapture, setEnableScreenCapture,
-    captureInterval, setCaptureInterval,
-    ocrEngine, setOcrEngine,
-    detectCodeBlocks, setDetectCodeBlocks,
-    detectMCQs, setDetectMCQs,
-  } = useSettingsStore();
+  const { enableScreenCapture, setEnableScreenCapture } = useSettingsStore();
 
   return (
     <div className="space-y-6">
       <SettingsSection title="Screen Capture">
         <ToggleSetting
           label="Enable screen capture"
-          description="Allow analyzing screen content for questions"
+          description="Allow the capture button and ⌘+Shift+S to analyze your screen"
           value={enableScreenCapture}
           onChange={setEnableScreenCapture}
         />
-        <SliderSetting
-          label="Capture interval"
-          description="Seconds between automatic screen captures"
-          value={captureInterval}
-          min={1}
-          max={10}
-          onChange={setCaptureInterval}
-          disabled={!enableScreenCapture}
-        />
-      </SettingsSection>
-
-      <SettingsSection title="OCR Engine">
-        <SelectSetting
-          label="Text recognition engine"
-          description="Choose the OCR engine for extracting text from screen"
-          value={ocrEngine}
-          options={[
-            { value: "tesseract", label: "Tesseract (faster, requires install)" },
-            { value: "easyocr", label: "EasyOCR (more accurate, slower)" },
-          ]}
-          onChange={(v) => setOcrEngine(v as any)}
-        />
         <InfoBox>
-          Tesseract requires separate installation. Run: <code className="bg-white/10 px-1 rounded">brew install tesseract</code>
+          Capture reads the active Chrome tab through the Wingman extension, so Chrome must be open with the
+          extension enabled. Answers show up here in the island, not in the browser.
         </InfoBox>
-      </SettingsSection>
-
-      <SettingsSection title="Detection">
-        <ToggleSetting
-          label="Detect code blocks"
-          description="Identify programming code on screen"
-          value={detectCodeBlocks}
-          onChange={setDetectCodeBlocks}
-        />
-        <ToggleSetting
-          label="Detect MCQs"
-          description="Identify multiple choice questions"
-          value={detectMCQs}
-          onChange={setDetectMCQs}
-        />
       </SettingsSection>
     </div>
   );
@@ -371,31 +321,7 @@ const AISettings: React.FC = () => {
     autoScrollAnswers, setAutoScrollAnswers,
   } = useSettingsStore();
 
-  const providerModels: Record<string, { value: string; label: string }[]> = {
-    groq: [
-      { value: "llama-3.3-70b-versatile", label: "LLaMA 3.3 70B (recommended)" },
-      { value: "llama-3.1-70b-versatile", label: "LLaMA 3.1 70B" },
-      { value: "llama-3.1-8b-instant", label: "LLaMA 3.1 8B (faster)" },
-      { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
-      { value: "gemma2-9b-it", label: "Gemma 2 9B" },
-    ],
-    gemini: [
-      { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-      { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
-      { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-    ],
-    mistral: [
-      { value: "mistral-large-latest", label: "Mistral Large (recommended)" },
-      { value: "mistral-medium-latest", label: "Mistral Medium" },
-      { value: "mistral-small-latest", label: "Mistral Small (faster)" },
-      { value: "open-mistral-7b", label: "Open Mistral 7B" },
-    ],
-    claude: [
-      { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4 (recommended)" },
-      { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (faster)" },
-      { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-    ],
-  };
+  const modelOptions = PROVIDER_MODELS[aiProvider].map((m) => ({ value: m, label: m }));
 
   return (
     <div className="space-y-6">
@@ -405,20 +331,15 @@ const AISettings: React.FC = () => {
           description="Choose which AI service to use"
           value={aiProvider}
           options={[
-            { value: "groq", label: "🚀 Groq (FREE & Fast)" },
-            { value: "gemini", label: "🔮 Google Gemini (FREE tier)" },
-            { value: "mistral", label: "🌟 Mistral AI" },
-            { value: "claude", label: "🧠 Claude (Paid)" },
+            { value: "groq", label: "🚀 Groq (recommended)" },
+            { value: "nvidia", label: "🟢 NVIDIA" },
           ]}
-          onChange={(v) => {
-            setAIProvider(v as any);
-            // Set default model for provider
-            const models = providerModels[v];
-            if (models?.length) {
-              setAIModel(models[0].value);
-            }
-          }}
+          onChange={(v) => setAIProvider(v as AIProvider)}
         />
+        <InfoBox>
+          The other provider is the automatic backup. If the main one is busy, rate-limited or not responding,
+          Wingman switches over, and rotates through your NVIDIA keys until one answers.
+        </InfoBox>
       </SettingsSection>
 
       <SettingsSection title="Model">
@@ -426,7 +347,7 @@ const AISettings: React.FC = () => {
           label="Model"
           description="Choose the AI model to use"
           value={aiModel}
-          options={providerModels[aiProvider] || []}
+          options={modelOptions}
           onChange={setAIModel}
         />
       </SettingsSection>
@@ -473,40 +394,25 @@ const APIKeysSettings: React.FC = () => {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
   const providers = [
-    { key: "groq", name: "Groq", url: "https://console.groq.com/keys", free: true },
-    { key: "google", name: "Google AI (Gemini)", url: "https://aistudio.google.com/app/apikey", free: true },
-    { key: "mistral", name: "Mistral AI", url: "https://console.mistral.ai/api-keys/", free: true },
-    { key: "anthropic", name: "Anthropic Claude", url: "https://console.anthropic.com/", free: false },
+    { key: "groq", name: "Groq", url: "https://console.groq.com/keys", multi: false },
+    { key: "nvidia", name: "NVIDIA (backup keys)", url: "https://build.nvidia.com/", multi: true },
   ];
 
   return (
     <div className="space-y-6">
       <InfoBox>
-        API keys are stored locally and never sent to any server except the respective AI provider.
+        Leave a field blank to use the keys from the backend .env file. Keys are stored on this Mac and only
+        sent to that provider.
       </InfoBox>
 
-      <SettingsSection title="Free Providers">
-        {providers.filter(p => p.free).map((provider) => (
+      <SettingsSection title="Providers">
+        {providers.map((provider) => (
           <APIKeyInput
             key={provider.key}
             provider={provider.key}
             name={provider.name}
             url={provider.url}
-            value={apiKeys[provider.key as keyof typeof apiKeys] || ""}
-            showKey={showKeys[provider.key]}
-            onToggleShow={() => setShowKeys(s => ({ ...s, [provider.key]: !s[provider.key] }))}
-            onChange={(value) => setAPIKey(provider.key, value)}
-          />
-        ))}
-      </SettingsSection>
-
-      <SettingsSection title="Paid Providers">
-        {providers.filter(p => !p.free).map((provider) => (
-          <APIKeyInput
-            key={provider.key}
-            provider={provider.key}
-            name={provider.name}
-            url={provider.url}
+            multi={provider.multi}
             value={apiKeys[provider.key as keyof typeof apiKeys] || ""}
             showKey={showKeys[provider.key]}
             onToggleShow={() => setShowKeys(s => ({ ...s, [provider.key]: !s[provider.key] }))}
@@ -521,7 +427,6 @@ const APIKeysSettings: React.FC = () => {
 // Appearance Settings
 const AppearanceSettings: React.FC = () => {
   const {
-    theme, setTheme,
     islandPosition, setIslandPosition,
     windowOpacity, setWindowOpacity,
     accentColor, setAccentColor,
@@ -540,33 +445,6 @@ const AppearanceSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Theme">
-        <div className="grid grid-cols-3 gap-3">
-          {(["dark", "light", "system"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTheme(t)}
-              className={`p-4 rounded-xl border transition-colors ${
-                theme === t
-                  ? "bg-wingman-500/20 border-wingman-500/40"
-                  : "bg-white/5 border-transparent hover:bg-white/10"
-              }`}
-            >
-              <div
-                className={`w-full h-8 rounded-lg mb-2 ${
-                  t === "dark"
-                    ? "bg-gray-900"
-                    : t === "light"
-                    ? "bg-gray-100"
-                    : "bg-gradient-to-r from-gray-900 to-gray-100"
-                }`}
-              />
-              <span className="text-xs text-white capitalize">{t}</span>
-            </button>
-          ))}
-        </div>
-      </SettingsSection>
-
       <SettingsSection title="Accent Color">
         <div className="flex gap-2 flex-wrap">
           {accentColors.map((color) => (
@@ -605,7 +483,7 @@ const AppearanceSettings: React.FC = () => {
       <SettingsSection title="Display">
         <SliderSetting
           label="Window opacity"
-          description="Background transparency level"
+          description="Overall transparency of Wingman"
           value={windowOpacity}
           min={50}
           max={100}
@@ -613,7 +491,7 @@ const AppearanceSettings: React.FC = () => {
         />
         <ToggleSetting
           label="Compact mode"
-          description="Reduce padding and spacing for smaller UI"
+          description="Shrink the whole interface"
           value={compactMode}
           onChange={setCompactMode}
         />
@@ -624,18 +502,55 @@ const AppearanceSettings: React.FC = () => {
 
 // Hotkeys Settings
 const HotkeysSettings: React.FC = () => {
-  // hotkeys will be used when customization is implemented
-  const _hotkeys = useSettingsStore((state) => state.hotkeys);
+  const { hotkeys, setHotkey } = useSettingsStore();
+  const [recording, setRecording] = useState<HotkeyAction | null>(null);
 
-  const hotkeyList = [
-    { key: "toggleVisibility", action: "Toggle visibility", keys: "⌘ + Shift + W" },
-    { key: "commandPalette", action: "Command palette", keys: "⌘ + Space" },
-    { key: "pauseResume", action: "Pause/Resume", keys: "⌘ + Shift + P" },
-    { key: "captureScreen", action: "Capture screen", keys: "⌘ + Shift + S" },
-    { key: "emergencyHide", action: "Emergency hide", keys: "⌘ + Shift + Esc" },
-    { key: "startListening", action: "Start listening", keys: "⌘ + Shift + L" },
-    { key: "stopListening", action: "Stop listening", keys: "⌘ + Shift + K" },
+  const hotkeyList: { key: HotkeyAction; action: string }[] = [
+    { key: "toggleVisibility", action: "Toggle visibility" },
+    { key: "commandPalette", action: "Command palette" },
+    { key: "pauseResume", action: "Pause/Resume" },
+    { key: "captureScreen", action: "Capture screen" },
+    { key: "emergencyHide", action: "Emergency hide" },
+    { key: "startListening", action: "Start listening" },
+    { key: "stopListening", action: "Stop listening" },
   ];
+
+  // Record the next key combo and turn it into an Electron accelerator
+  useEffect(() => {
+    if (!recording) return;
+    const onKey = async (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        setRecording(null);
+        return;
+      }
+      if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) return;
+      const mods = [
+        (e.metaKey || e.ctrlKey) && "CommandOrControl",
+        e.altKey && "Alt",
+        e.shiftKey && "Shift",
+      ].filter(Boolean);
+      if (!mods.length) {
+        toast.error("Use at least one modifier (⌘, ⌥ or ⇧)");
+        return;
+      }
+      const key = e.code.startsWith("Key") ? e.code.slice(3)
+        : e.code.startsWith("Digit") ? e.code.slice(5)
+        : e.key === " " ? "Space"
+        : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+      const accelerator = [...mods, key].join("+");
+      const action = recording;
+      setRecording(null);
+      if (await setHotkey(action, accelerator)) {
+        toast.success(`Set to ${formatAccelerator(accelerator)}`);
+      } else {
+        toast.error(`${formatAccelerator(accelerator)} is taken or not allowed`);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [recording, setHotkey]);
 
   return (
     <div className="space-y-6">
@@ -647,33 +562,47 @@ const HotkeysSettings: React.FC = () => {
               className="flex items-center justify-between py-3 px-4 rounded-lg bg-white/5"
             >
               <span className="text-sm text-white/80">{hotkey.action}</span>
-              <kbd className="px-3 py-1 rounded bg-white/10 text-xs text-white/60 font-mono">
-                {hotkey.keys}
-              </kbd>
+              <button
+                onClick={() => setRecording(recording === hotkey.key ? null : hotkey.key)}
+                className={`px-3 py-1 rounded text-xs font-mono transition-colors ${
+                  recording === hotkey.key
+                    ? "bg-wingman-500/30 text-wingman-300"
+                    : "bg-white/10 text-white/60 hover:bg-white/20"
+                }`}
+              >
+                {recording === hotkey.key ? "Press keys… (Esc to cancel)" : formatAccelerator(hotkeys[hotkey.key])}
+              </button>
             </div>
           ))}
         </div>
       </SettingsSection>
 
       <InfoBox>
-        Hotkey customization coming soon. Currently using system defaults.
+        Click a shortcut and press the new key combination. Shortcuts work even when Wingman isn't focused.
       </InfoBox>
     </div>
   );
 };
+
+const formatAccelerator = (accelerator: string) =>
+  accelerator
+    .replace("CommandOrControl", "⌘")
+    .replace("Alt", "⌥")
+    .replace("Escape", "Esc")
+    .split("+")
+    .join(" + ");
 
 // Privacy Settings
 const PrivacySettings: React.FC = () => {
   const {
     hideFromScreenCapture, setHideFromScreenCapture,
     saveSessionHistory, setSaveSessionHistory,
-    anonymousAnalytics, setAnonymousAnalytics,
     clearAllData,
   } = useSettingsStore();
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     if (confirm("Are you sure you want to clear all data? This cannot be undone.")) {
-      clearAllData();
+      await clearAllData();
       toast.success("All data cleared");
     }
   };
@@ -695,15 +624,9 @@ const PrivacySettings: React.FC = () => {
       <SettingsSection title="Data Storage">
         <ToggleSetting
           label="Save session history"
-          description="Store questions and answers locally for future reference"
+          description="Keep conversations on disk so they survive a restart"
           value={saveSessionHistory}
           onChange={setSaveSessionHistory}
-        />
-        <ToggleSetting
-          label="Anonymous analytics"
-          description="Help improve Wingman by sharing anonymous usage data (no personal data)"
-          value={anonymousAnalytics}
-          onChange={setAnonymousAnalytics}
         />
       </SettingsSection>
 
@@ -712,7 +635,7 @@ const PrivacySettings: React.FC = () => {
           <div>
             <p className="text-sm text-white">Clear all data</p>
             <p className="text-xs text-white/40">
-              Delete history, settings, and cache permanently
+              Delete conversation history and reset all settings
             </p>
           </div>
           <button
@@ -877,11 +800,12 @@ const APIKeyInput: React.FC<{
   provider: string;
   name: string;
   url: string;
+  multi?: boolean;
   value: string;
   showKey: boolean;
   onToggleShow: () => void;
   onChange: (value: string) => void;
-}> = ({ provider: _provider, name, url, value, showKey, onToggleShow, onChange }) => {
+}> = ({ provider: _provider, name, url, multi, value, showKey, onToggleShow, onChange }) => {
   const [localValue, setLocalValue] = useState(value);
   const [saved, setSaved] = useState(false);
 
@@ -909,13 +833,23 @@ const APIKeyInput: React.FC<{
         </a>
       </div>
       <div className="flex gap-2">
-        <input
-          type={showKey ? "text" : "password"}
-          value={localValue}
-          onChange={(e) => setLocalValue(e.target.value)}
-          placeholder={`Enter ${name} API key...`}
-          className="flex-1 px-3 py-1.5 rounded-lg bg-white/10 text-sm text-white border border-white/10 focus:outline-none focus:border-wingman-500 font-mono"
-        />
+        {multi && showKey ? (
+          <textarea
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            placeholder="One key per line"
+            rows={4}
+            className="flex-1 px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white border border-white/10 focus:outline-none focus:border-wingman-500 font-mono"
+          />
+        ) : (
+          <input
+            type={showKey ? "text" : "password"}
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            placeholder={multi ? "Click Show to paste one key per line" : `Enter ${name} API key...`}
+            className="flex-1 px-3 py-1.5 rounded-lg bg-white/10 text-sm text-white border border-white/10 focus:outline-none focus:border-wingman-500 font-mono"
+          />
+        )}
         <button
           onClick={onToggleShow}
           className="px-3 py-1.5 rounded-lg bg-white/10 text-white/60 hover:text-white text-xs"

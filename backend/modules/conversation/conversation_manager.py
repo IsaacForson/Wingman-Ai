@@ -99,6 +99,7 @@ class ConversationManager:
     
     def __init__(self, storage_path: str = None):
         self.storage_path = storage_path or self._get_default_storage_path()
+        self.persist = True  # "Save session history" setting
         self.conversations: Dict[str, Conversation] = {}
         self.active_conversation_id: Optional[str] = None
         self._load_conversations()
@@ -132,6 +133,8 @@ class ConversationManager:
     
     def _save_conversations(self):
         """Save conversations to disk"""
+        if not self.persist:
+            return
         try:
             data = {
                 "conversations": [c.to_dict() for c in self.conversations.values()],

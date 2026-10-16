@@ -11,6 +11,16 @@ import { HistoryView } from "./components/History"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 import socketService from "./services/socket"
+import { useSettingsStore, requestCapture, IslandPosition } from "./store/settingsStore"
+
+const ISLAND_POSITION_CLASSES: Record<IslandPosition, string> = {
+  "top": "top-4 left-1/2 -translate-x-1/2",
+  "top-left": "top-4 left-4",
+  "top-right": "top-4 right-4",
+  "bottom": "bottom-4 left-1/2 -translate-x-1/2",
+  "bottom-left": "bottom-4 left-4",
+  "bottom-right": "bottom-4 right-4",
+}
 
 function App() {
   const { 
@@ -27,6 +37,12 @@ function App() {
   } = useAppStore()
   
   const { connect, disconnect } = useWebSocket()
+  const islandPosition = useSettingsStore((state) => state.islandPosition)
+
+  // Re-apply saved window/look settings once on startup
+  useEffect(() => {
+    useSettingsStore.getState().applyLocalSettings()
+  }, [])
 
   // Handle click-through when modals are open
   useEffect(() => {
@@ -64,21 +80,7 @@ function App() {
         setHistoryOpen(true)
       }
       
-      // Cmd/Ctrl + Shift + L -> Start Listening
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'l') {
-        e.preventDefault()
-        if (!isListening) {
-          socketService.startAudio()
-        }
-      }
-      
-      // Cmd/Ctrl + Shift + K -> Stop Listening
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
-        e.preventDefault()
-        if (isListening) {
-          socketService.stopAudio()
-        }
-      }
+      // Start/stop listening hotkeys are global shortcuts now (see Settings → Hotkeys)
       
       // Cmd/Ctrl + L -> Toggle Listening
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'l') {
@@ -120,7 +122,14 @@ function App() {
         setPaused(true)
       })
 
+      const unsubCapture = window.wingman.onCaptureScreen(requestCapture)
+      const unsubStart = window.wingman.onStartListening(() => socketService.startAudio())
+      const unsubStop = window.wingman.onStopListening(() => socketService.stopAudio())
+
       return () => {
+        unsubCapture()
+        unsubStart()
+        unsubStop()
         unsubMode()
         unsubPause()
         unsubEmergency()
@@ -136,7 +145,7 @@ function App() {
   return (
     <div className="w-screen h-screen relative overflow-visible">
       {/* Main Dynamic Island - Positioned absolutely for free dragging */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+      <div className={`absolute ${ISLAND_POSITION_CLASSES[islandPosition] || ISLAND_POSITION_CLASSES.top} z-50`}>
         <DynamicIsland />
       </div>
       

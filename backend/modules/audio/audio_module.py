@@ -29,6 +29,7 @@ class AudioModule:
         self._is_paused = False
         self._speech_buffer: list[bytes] = []
         self._processing_task: Optional[asyncio.Task] = None
+        self.silence_ms = 1000  # silence that ends a spoken question
     
     async def initialize(self):
         """Initialize all audio components"""
@@ -119,7 +120,6 @@ class AudioModule:
         
         is_speaking = False
         silence_frames = 0
-        max_silence_frames = 30  # ~1 second of silence at 30fps
         
         try:
             while self._is_running:
@@ -155,7 +155,8 @@ class AudioModule:
                         silence_frames += 1
                         self._speech_buffer.append(chunk)  # Include trailing silence
                         
-                        if silence_frames >= max_silence_frames:
+                        chunk_ms = settings.audio_chunk_size / settings.audio_sample_rate * 1000
+                        if silence_frames * chunk_ms >= self.silence_ms:
                             # Speech ended - process the buffer
                             is_speaking = False
                             await event_bus.emit(EventType.AUDIO_SPEECH_END, {}, "audio_module")
@@ -202,6 +203,19 @@ class AudioModule:
         
         except Exception as e:
             logger.error(f"Transcription error: {e}")
+    
+    async def reload_transcriber(self):
+        """Rebuild the transcriber after the Whisper model / local setting changes"""
+        transcriber = Transcriber(model=settings.whisper_model, use_local=settings.use_local_whisper)
+        try:
+            await transcriber.initialize()
+        except Exception as e:
+            logger.error(f"Local Whisper unavailable ({e}), using cloud transcription")
+            settings.use_local_whisper = False
+            transcriber = Transcriber(model=settings.whisper_model, use_local=False)
+            await transcriber.initialize()
+        self.transcriber = transcriber
+        logger.info(f"Transcriber reloaded: model={settings.whisper_model}, local={settings.use_local_whisper}")
     
     async def shutdown(self):
         """Shutdown the audio module"""

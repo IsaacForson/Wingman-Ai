@@ -5,144 +5,109 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import toast from 'react-hot-toast'
 import socketService from '../services/socket'
+import { useAppStore, AIProvider, PROVIDER_MODELS } from './appStore'
 
-export type AIProvider = 'openai' | 'anthropic' | 'groq' | 'gemini' | 'together' | 'huggingface' | 'ollama'
 export type WhisperModel = 'tiny' | 'base' | 'small' | 'medium' | 'large'
-export type OCREngine = 'tesseract' | 'easyocr'
-export type Theme = 'dark' | 'light' | 'system'
 export type IslandPosition = 'top' | 'top-left' | 'top-right' | 'bottom' | 'bottom-left' | 'bottom-right'
+export type HotkeyAction = 'toggleVisibility' | 'commandPalette' | 'pauseResume' | 'captureScreen' | 'emergencyHide' | 'startListening' | 'stopListening'
 
 interface SettingsState {
   // General Settings
   launchAtStartup: boolean
   setLaunchAtStartup: (value: boolean) => void
-  
+
   alwaysOnTop: boolean
   setAlwaysOnTop: (value: boolean) => void
-  
+
   showInDock: boolean
   setShowInDock: (value: boolean) => void
-  
-  minimizeToTray: boolean
-  setMinimizeToTray: (value: boolean) => void
-  
+
   soundEffects: boolean
   setSoundEffects: (value: boolean) => void
-  
+
   desktopNotifications: boolean
   setDesktopNotifications: (value: boolean) => void
-  
+
   // Audio Settings
   inputDevice: string
   setInputDevice: (device: string) => void
-  
+
   vadSensitivity: number
   setVadSensitivity: (value: number) => void
-  
+
   autoStartListening: boolean
   setAutoStartListening: (value: boolean) => void
-  
+
   whisperModel: WhisperModel
   setWhisperModel: (model: WhisperModel) => void
-  
+
   useLocalWhisper: boolean
   setUseLocalWhisper: (value: boolean) => void
-  
+
   silenceThreshold: number
   setSilenceThreshold: (value: number) => void
-  
+
   // Screen Settings
   enableScreenCapture: boolean
   setEnableScreenCapture: (value: boolean) => void
-  
-  captureInterval: number
-  setCaptureInterval: (value: number) => void
-  
-  ocrEngine: OCREngine
-  setOcrEngine: (engine: OCREngine) => void
-  
-  detectCodeBlocks: boolean
-  setDetectCodeBlocks: (value: boolean) => void
-  
-  detectMCQs: boolean
-  setDetectMCQs: (value: boolean) => void
-  
+
   // AI Settings
   aiProvider: AIProvider
   setAIProvider: (provider: AIProvider) => void
-  
+
   aiModel: string
   setAIModel: (model: string) => void
-  
+
   temperature: number
   setTemperature: (value: number) => void
-  
+
   maxTokens: number
   setMaxTokens: (value: number) => void
-  
+
   streamResponses: boolean
   setStreamResponses: (value: boolean) => void
-  
+
   autoScrollAnswers: boolean
   setAutoScrollAnswers: (value: boolean) => void
-  
-  // API Keys (stored securely)
+
+  // API Keys (blank = use the backend .env). nvidia holds several keys, comma or newline separated
   apiKeys: {
-    openai?: string
-    anthropic?: string
     groq?: string
-    google?: string
-    together?: string
-    huggingface?: string
+    nvidia?: string
   }
   setAPIKey: (provider: string, key: string) => void
-  
-  ollamaBaseUrl: string
-  setOllamaBaseUrl: (url: string) => void
-  
+
   // Appearance Settings
-  theme: Theme
-  setTheme: (theme: Theme) => void
-  
   islandPosition: IslandPosition
   setIslandPosition: (position: IslandPosition) => void
-  
+
   windowOpacity: number
   setWindowOpacity: (value: number) => void
-  
+
   accentColor: string
   setAccentColor: (color: string) => void
-  
+
   compactMode: boolean
   setCompactMode: (value: boolean) => void
-  
+
   // Privacy Settings
   hideFromScreenCapture: boolean
   setHideFromScreenCapture: (value: boolean) => void
-  
+
   saveSessionHistory: boolean
   setSaveSessionHistory: (value: boolean) => void
-  
-  anonymousAnalytics: boolean
-  setAnonymousAnalytics: (value: boolean) => void
-  
-  // Hotkeys
-  hotkeys: {
-    toggleVisibility: string
-    commandPalette: string
-    pauseResume: string
-    captureScreen: string
-    emergencyHide: string
-    startListening: string
-    stopListening: string
-  }
-  setHotkey: (action: string, keys: string) => void
-  
+
+  // Hotkeys (Electron accelerators)
+  hotkeys: Record<HotkeyAction, string>
+  setHotkey: (action: HotkeyAction, keys: string) => Promise<boolean>
+
   // Actions
   syncWithBackend: () => void
+  applyLocalSettings: () => void
   resetToDefaults: () => void
-  clearAllData: () => void
+  clearAllData: () => Promise<void>
 }
 
 const defaultSettings = {
@@ -150,47 +115,39 @@ const defaultSettings = {
   launchAtStartup: false,
   alwaysOnTop: true,
   showInDock: false,
-  minimizeToTray: true,
-  soundEffects: true,
-  desktopNotifications: true,
-  
+  soundEffects: false,
+  desktopNotifications: false,
+
   // Audio
   inputDevice: 'default',
   vadSensitivity: 2,
   autoStartListening: false,
   whisperModel: 'base' as WhisperModel,
   useLocalWhisper: false,
-  silenceThreshold: 500,
-  
+  silenceThreshold: 2000,
+
   // Screen
   enableScreenCapture: true,
-  captureInterval: 2,
-  ocrEngine: 'tesseract' as OCREngine,
-  detectCodeBlocks: true,
-  detectMCQs: true,
-  
+
   // AI
   aiProvider: 'groq' as AIProvider,
-  aiModel: 'llama-3.3-70b-versatile',
+  aiModel: PROVIDER_MODELS.groq[0],
   temperature: 0.7,
   maxTokens: 2048,
   streamResponses: true,
   autoScrollAnswers: false,
   apiKeys: {},
-  ollamaBaseUrl: 'http://localhost:11434',
-  
+
   // Appearance
-  theme: 'dark' as Theme,
   islandPosition: 'top' as IslandPosition,
-  windowOpacity: 85,
+  windowOpacity: 100,
   accentColor: '#0ea5e9',
   compactMode: false,
-  
+
   // Privacy
   hideFromScreenCapture: true,
   saveSessionHistory: true,
-  anonymousAnalytics: false,
-  
+
   // Hotkeys
   hotkeys: {
     toggleVisibility: 'CommandOrControl+Shift+W',
@@ -200,192 +157,232 @@ const defaultSettings = {
     emergencyHide: 'CommandOrControl+Shift+Escape',
     startListening: 'CommandOrControl+Shift+L',
     stopListening: 'CommandOrControl+Shift+K',
-  },
+  } as Record<HotkeyAction, string>,
+}
+
+// Send one changed field to the backend
+const syncField = (data: Record<string, unknown>) => socketService.emit('sync_settings', data)
+
+// Tailwind's wingman-300..600 read these variables (see tailwind.config.js)
+function applyAccent(hex: string) {
+  const n = parseInt(hex.slice(1), 16)
+  const rgb = [n >> 16, (n >> 8) & 255, n & 255]
+  const mix = (target: number, amount: number) =>
+    rgb.map((c) => Math.round(c + (target - c) * amount)).join(' ')
+  const root = document.documentElement.style
+  root.setProperty('--wingman-300', mix(255, 0.5))
+  root.setProperty('--wingman-400', mix(255, 0.25))
+  root.setProperty('--wingman-500', rgb.join(' '))
+  root.setProperty('--wingman-600', mix(0, 0.15))
+}
+
+// Tailwind sizes are rem-based, so shrinking the root font scales the whole UI
+const applyCompact = (compact: boolean) => {
+  document.documentElement.style.fontSize = compact ? '14px' : ''
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       ...defaultSettings,
-      
+
       // General setters
       setLaunchAtStartup: (value) => {
         set({ launchAtStartup: value })
         window.wingman?.setLaunchAtStartup?.(value)
       },
-      
+
       setAlwaysOnTop: (value) => {
         set({ alwaysOnTop: value })
         window.wingman?.setAlwaysOnTop?.(value)
       },
-      
+
       setShowInDock: (value) => {
         set({ showInDock: value })
         window.wingman?.setShowInDock?.(value)
       },
-      
-      setMinimizeToTray: (value) => set({ minimizeToTray: value }),
+
       setSoundEffects: (value) => set({ soundEffects: value }),
-      setDesktopNotifications: (value) => set({ desktopNotifications: value }),
-      
-      // Audio setters
+      setDesktopNotifications: (value) => {
+        set({ desktopNotifications: value })
+        if (value && 'Notification' in window) Notification.requestPermission()
+      },
+
+      // Audio setters (applied the next time listening starts)
       setInputDevice: (device) => {
         set({ inputDevice: device })
-        socketService.emit('set_audio_device', { device })
+        syncField({ inputDevice: device })
       },
-      
+
       setVadSensitivity: (value) => {
         set({ vadSensitivity: value })
-        socketService.emit('set_vad_sensitivity', { sensitivity: value })
+        syncField({ vadSensitivity: value })
       },
-      
+
       setAutoStartListening: (value) => set({ autoStartListening: value }),
-      
+
       setWhisperModel: (model) => {
         set({ whisperModel: model })
-        socketService.emit('set_whisper_model', { model })
+        syncField({ whisperModel: model, useLocalWhisper: get().useLocalWhisper })
       },
-      
+
       setUseLocalWhisper: (value) => {
         set({ useLocalWhisper: value })
-        socketService.emit('set_use_local_whisper', { value })
+        syncField({ whisperModel: get().whisperModel, useLocalWhisper: value })
       },
-      
-      setSilenceThreshold: (value) => set({ silenceThreshold: value }),
-      
+
+      setSilenceThreshold: (value) => {
+        set({ silenceThreshold: value })
+        syncField({ silenceThreshold: value })
+      },
+
       // Screen setters
-      setEnableScreenCapture: (value) => {
-        set({ enableScreenCapture: value })
-        socketService.emit('set_screen_capture', { enabled: value })
-      },
-      
-      setCaptureInterval: (value) => {
-        set({ captureInterval: value })
-        socketService.emit('set_capture_interval', { interval: value })
-      },
-      
-      setOcrEngine: (engine) => {
-        set({ ocrEngine: engine })
-        socketService.emit('set_ocr_engine', { engine })
-      },
-      
-      setDetectCodeBlocks: (value) => set({ detectCodeBlocks: value }),
-      setDetectMCQs: (value) => set({ detectMCQs: value }),
-      
+      setEnableScreenCapture: (value) => set({ enableScreenCapture: value }),
+
       // AI setters
       setAIProvider: (provider) => {
-        set({ aiProvider: provider })
-        socketService.setAIProvider(provider, get().aiModel)
+        const model = PROVIDER_MODELS[provider][0]
+        set({ aiProvider: provider, aiModel: model })
+        useAppStore.getState().setAIProvider(provider, model)
+        socketService.setAIProvider(provider, model)
       },
-      
+
       setAIModel: (model) => {
         set({ aiModel: model })
+        useAppStore.getState().setAIProvider(get().aiProvider, model)
         socketService.setAIProvider(get().aiProvider, model)
       },
-      
+
       setTemperature: (value) => {
         set({ temperature: value })
-        socketService.emit('set_temperature', { temperature: value })
+        syncField({ temperature: value })
       },
-      
+
       setMaxTokens: (value) => {
         set({ maxTokens: value })
-        socketService.emit('set_max_tokens', { maxTokens: value })
+        syncField({ maxTokens: value })
       },
-      
+
       setStreamResponses: (value) => set({ streamResponses: value }),
-      
+
       setAutoScrollAnswers: (value) => set({ autoScrollAnswers: value }),
-      
+
       setAPIKey: (provider, key) => {
         set((state) => ({
           apiKeys: { ...state.apiKeys, [provider]: key }
         }))
         socketService.emit('set_api_key', { provider, key })
       },
-      
-      setOllamaBaseUrl: (url) => {
-        set({ ollamaBaseUrl: url })
-        socketService.emit('set_ollama_url', { url })
-      },
-      
+
       // Appearance setters
-      setTheme: (theme) => {
-        set({ theme })
-        document.documentElement.setAttribute('data-theme', theme)
-      },
-      
-      setIslandPosition: (position) => {
-        set({ islandPosition: position })
-        window.wingman?.setIslandPosition?.(position)
-      },
-      
+      setIslandPosition: (position) => set({ islandPosition: position }),
+
       setWindowOpacity: (value) => {
         set({ windowOpacity: value })
         window.wingman?.setWindowOpacity?.(value / 100)
       },
-      
+
       setAccentColor: (color) => {
         set({ accentColor: color })
-        document.documentElement.style.setProperty('--accent-color', color)
+        applyAccent(color)
       },
-      
-      setCompactMode: (value) => set({ compactMode: value }),
-      
+
+      setCompactMode: (value) => {
+        set({ compactMode: value })
+        applyCompact(value)
+      },
+
       // Privacy setters
       setHideFromScreenCapture: (value) => {
         set({ hideFromScreenCapture: value })
         window.wingman?.setHideFromScreenCapture?.(value)
       },
-      
-      setSaveSessionHistory: (value) => set({ saveSessionHistory: value }),
-      setAnonymousAnalytics: (value) => set({ anonymousAnalytics: value }),
-      
-      // Hotkeys setter
-      setHotkey: (action, keys) => {
-        set((state) => ({
-          hotkeys: { ...state.hotkeys, [action]: keys }
-        }))
-        window.wingman?.setHotkey?.(action, keys)
+
+      setSaveSessionHistory: (value) => {
+        set({ saveSessionHistory: value })
+        syncField({ saveSessionHistory: value })
       },
-      
+
+      // Hotkeys setter: only saved if Electron could register it
+      setHotkey: async (action, keys) => {
+        const ok = (await window.wingman?.setHotkey?.(action, keys)) ?? true
+        if (ok) {
+          set((state) => ({ hotkeys: { ...state.hotkeys, [action]: keys } }))
+        }
+        return ok
+      },
+
       // Actions
       syncWithBackend: () => {
         const state = get()
-        socketService.emit('sync_settings', {
+        syncField({
           aiProvider: state.aiProvider,
           aiModel: state.aiModel,
           temperature: state.temperature,
           maxTokens: state.maxTokens,
+          inputDevice: state.inputDevice,
           vadSensitivity: state.vadSensitivity,
+          silenceThreshold: state.silenceThreshold,
           whisperModel: state.whisperModel,
           useLocalWhisper: state.useLocalWhisper,
-          enableScreenCapture: state.enableScreenCapture,
-          captureInterval: state.captureInterval,
-          ocrEngine: state.ocrEngine,
+          saveSessionHistory: state.saveSessionHistory,
           apiKeys: state.apiKeys,
-          ollamaBaseUrl: state.ollamaBaseUrl,
         })
       },
-      
+
+      // Re-apply window/look settings on startup (Electron doesn't remember them)
+      applyLocalSettings: () => {
+        const state = get()
+        window.wingman?.setAlwaysOnTop?.(state.alwaysOnTop)
+        window.wingman?.setShowInDock?.(state.showInDock)
+        window.wingman?.setWindowOpacity?.(state.windowOpacity / 100)
+        window.wingman?.setHideFromScreenCapture?.(state.hideFromScreenCapture)
+        for (const [action, keys] of Object.entries(state.hotkeys)) {
+          window.wingman?.setHotkey?.(action, keys)
+        }
+        applyAccent(state.accentColor)
+        applyCompact(state.compactMode)
+      },
+
       resetToDefaults: () => {
         set(defaultSettings)
+        get().applyLocalSettings()
         get().syncWithBackend()
+        useAppStore.getState().setAIProvider(defaultSettings.aiProvider, defaultSettings.aiModel)
       },
-      
-      clearAllData: () => {
+
+      clearAllData: async () => {
         localStorage.clear()
-        set(defaultSettings)
+        useAppStore.getState().clearHistory()
+        get().resetToDefaults()
+        await fetch('http://localhost:8765/api/conversations', { method: 'DELETE' }).catch(() => {})
       },
     }),
     {
       name: 'wingman-settings',
+      version: 2,
+      // v1 had other AI providers, retired models and settings that did nothing (sound/notifications were "on" but silent)
+      migrate: (persisted: any, version) => {
+        if (version < 2 && persisted) {
+          const provider = persisted.aiProvider === 'nvidia' ? 'nvidia' : 'groq'
+          persisted.aiProvider = provider
+          persisted.aiModel = PROVIDER_MODELS[provider][0]
+          persisted.apiKeys = { groq: persisted.apiKeys?.groq }
+          persisted.soundEffects = false
+          persisted.desktopNotifications = false
+          persisted.windowOpacity = 100
+          // v1 stored browser mic IDs; the backend needs its own numeric device IDs
+          if (!/^\d+$/.test(String(persisted.inputDevice))) persisted.inputDevice = 'default'
+          // v1's 500ms was never applied; the real wait was ~2s, so keep that
+          persisted.silenceThreshold = 2000
+        }
+        return persisted
+      },
       partialize: (state) => ({
         // Only persist these fields
         launchAtStartup: state.launchAtStartup,
         alwaysOnTop: state.alwaysOnTop,
         showInDock: state.showInDock,
-        minimizeToTray: state.minimizeToTray,
         soundEffects: state.soundEffects,
         desktopNotifications: state.desktopNotifications,
         inputDevice: state.inputDevice,
@@ -395,10 +392,6 @@ export const useSettingsStore = create<SettingsState>()(
         useLocalWhisper: state.useLocalWhisper,
         silenceThreshold: state.silenceThreshold,
         enableScreenCapture: state.enableScreenCapture,
-        captureInterval: state.captureInterval,
-        ocrEngine: state.ocrEngine,
-        detectCodeBlocks: state.detectCodeBlocks,
-        detectMCQs: state.detectMCQs,
         aiProvider: state.aiProvider,
         aiModel: state.aiModel,
         temperature: state.temperature,
@@ -406,18 +399,44 @@ export const useSettingsStore = create<SettingsState>()(
         streamResponses: state.streamResponses,
         autoScrollAnswers: state.autoScrollAnswers,
         apiKeys: state.apiKeys,
-        ollamaBaseUrl: state.ollamaBaseUrl,
-        theme: state.theme,
         islandPosition: state.islandPosition,
         windowOpacity: state.windowOpacity,
         accentColor: state.accentColor,
         compactMode: state.compactMode,
         hideFromScreenCapture: state.hideFromScreenCapture,
         saveSessionHistory: state.saveSessionHistory,
-        anonymousAnalytics: state.anonymousAnalytics,
         hotkeys: state.hotkeys,
       }),
     }
   )
 )
 
+// Capture button / hotkey: the Chrome extension grabs the active tab and the answer lands in the island
+export function requestCapture() {
+  if (!useSettingsStore.getState().enableScreenCapture) {
+    toast.error('Screen capture is off (Settings → Screen)')
+    return
+  }
+  socketService.requestCapture()
+}
+
+// Sound + notification when an answer finishes (both off by default)
+export function notifyAnswerReady(answer: string) {
+  const { soundEffects, desktopNotifications } = useSettingsStore.getState()
+  if (soundEffects) {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.08, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
+    osc.connect(gain).connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.25)
+    osc.onended = () => ctx.close()
+  }
+  // Only when Wingman is hidden, otherwise the island already shows it
+  if (desktopNotifications && document.hidden && 'Notification' in window) {
+    new Notification('Wingman AI', { body: answer.slice(0, 140) })
+  }
+}

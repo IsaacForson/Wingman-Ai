@@ -24,7 +24,9 @@ import {
   Trash2,
   Code2,
   ChevronDown,
-  Loader2
+  Loader2,
+  ScanText,
+  Send
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -32,7 +34,7 @@ import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
 import { ModeSelector } from '../ModeSelector'
 import socketService from '../../services/socket'
-import { useSettingsStore } from '../../store/settingsStore'
+import { useSettingsStore, requestCapture } from '../../store/settingsStore'
 
 // Available programming languages for conversion
 const PROGRAMMING_LANGUAGES = [
@@ -77,6 +79,7 @@ const ExpandedState = () => {
   
   const [copied, setCopied] = useState(false)
   const [showAISelector, setShowAISelector] = useState(false)
+  const [typedQuestion, setTypedQuestion] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   
   const { autoScrollAnswers } = useSettingsStore()
@@ -136,6 +139,15 @@ const ExpandedState = () => {
     
     socketService.submitQuestion(questionToRegen, activeConversationId || undefined, currentMode)
     toast.success('Regenerating answer...')
+  }
+
+  const handleSubmitTyped = () => {
+    const question = typedQuestion.trim()
+    if (!question || isProcessing) return
+    const { activeConversationId, mode: currentMode } = useAppStore.getState()
+    setProcessing(true)
+    socketService.submitQuestion(question, activeConversationId || undefined, currentMode)
+    setTypedQuestion('')
   }
 
   const handleMicClick = () => {
@@ -268,6 +280,41 @@ const ExpandedState = () => {
         )}
       </div>
 
+      {/* Type a question */}
+      <form
+        className="flex items-end gap-2 mt-3 flex-shrink-0"
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleSubmitTyped()
+        }}
+      >
+        <textarea
+          value={typedQuestion}
+          onChange={(e) => setTypedQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter adds a new line
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmitTyped()
+            }
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          rows={1}
+          placeholder="Type a question…"
+          aria-label="Type a question"
+          className="flex-1 resize-none max-h-24 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-white/30 focus:outline-none focus:border-wingman-500/60 cursor-text"
+        />
+        <button
+          type="submit"
+          disabled={!typedQuestion.trim() || isProcessing}
+          className="p-2.5 rounded-lg bg-wingman-500/20 hover:bg-wingman-500/30 text-wingman-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          title="Send (Enter)"
+          aria-label="Send question"
+        >
+          <Send className="w-3.5 h-3.5" />
+        </button>
+      </form>
+
       {/* Footer Actions */}
       {(() => {
         // Get the last completed message for action buttons
@@ -308,6 +355,15 @@ const ExpandedState = () => {
                     <span className="text-xs text-wingman-400">Ask</span>
                   </>
                 )}
+              </ActionButton>
+              {/* Capture the active Chrome tab via the extension */}
+              <ActionButton
+                onClick={requestCapture}
+                className="px-2 gap-1 bg-wingman-500/20 hover:bg-wingman-500/30"
+                title="Capture screen (⌘+Shift+S)"
+              >
+                <ScanText className="w-3.5 h-3.5 text-wingman-400" />
+                <span className="text-xs text-wingman-400">Capture</span>
               </ActionButton>
             </div>
             
@@ -626,7 +682,7 @@ const EmptyState = ({ isListening, onMicClick }: { isListening: boolean; onMicCl
       No conversation yet
     </div>
     <p className="text-white/20 text-xs max-w-[200px]">
-      {isListening ? 'Listening... speak now' : 'Click the mic button to ask a question'}
+      {isListening ? 'Listening... speak now' : 'Click the mic, type below, or capture your screen'}
     </p>
     
     <button

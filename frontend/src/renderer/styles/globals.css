@@ -6,6 +6,12 @@
   --font-sans: 'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   
+  /* Accent shades, overridden by the accent color setting */
+  --wingman-300: 125 211 252;
+  --wingman-400: 56 189 248;
+  --wingman-500: 14 165 233;
+  --wingman-600: 2 132 199;
+
   /* Island colors */
   --island-bg: rgba(0, 0, 0, 0.85);
   --island-border: rgba(255, 255, 255, 0.1);

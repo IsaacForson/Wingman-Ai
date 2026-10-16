@@ -104,6 +104,11 @@ class SocketService {
     this.emit('capture_screen')
   }
 
+  // Asks the Chrome extension (via the backend) to capture the active tab
+  requestCapture(): void {
+    this.emit('request_capture')
+  }
+
   submitQuestion(question: string, conversationId?: string, mode?: string): void {
     this.emit('submit_question', { question, conversation_id: conversationId, mode })
   }

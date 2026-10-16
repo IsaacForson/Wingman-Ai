@@ -126,7 +126,7 @@ const tips: Tip[] = [
   {
     id: 'ai_providers',
     title: 'Try Different AI Providers',
-    content: 'Switch between Groq (fastest), Gemini (best free), or Ollama (local/private) based on your needs.',
+    content: 'Groq answers first. If it is busy or down, Wingman switches to NVIDIA automatically and rotates through your NVIDIA keys.',
     category: 'pro_tips'
   },
   {

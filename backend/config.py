@@ -27,17 +27,16 @@ class Settings(BaseSettings):
     
     # AI Providers - API Keys
     groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY")
-    google_api_key: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
-    mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    # Comma-separated NVIDIA keys, rotated when one is rate-limited or not responding
+    nvidia_api_keys: str = Field(default="", env="NVIDIA_API_KEYS")
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")  # For Whisper transcription fallback
     elevenlabs_api_key: Optional[str] = Field(default=None, env="ELEVENLABS_API_KEY")
     
     # AI Model Settings
-    # Provider options: groq, gemini, mistral, claude
+    # Provider options: groq, nvidia (the other one is used as automatic backup)
     ai_provider: str = Field(default="groq", env="AI_PROVIDER")
-    default_model: str = Field(default="llama-3.3-70b-versatile", env="DEFAULT_MODEL")
-    fallback_model: str = Field(default="llama-3.1-8b-instant", env="FALLBACK_MODEL")
+    default_model: str = Field(default="openai/gpt-oss-120b", env="DEFAULT_MODEL")
+    fallback_model: str = Field(default="openai/gpt-oss-20b", env="FALLBACK_MODEL")
     max_tokens: int = Field(default=2048, env="MAX_TOKENS")
     temperature: float = Field(default=0.7, env="TEMPERATURE")
     
@@ -79,6 +78,10 @@ class Settings(BaseSettings):
     enable_clipboard: bool = Field(default=True, env="ENABLE_CLIPBOARD")
     enable_wellness: bool = Field(default=False, env="ENABLE_WELLNESS")
     
+    @property
+    def nvidia_keys(self) -> list[str]:
+        return [k.strip() for k in self.nvidia_api_keys.replace("\n", ",").split(",") if k.strip()]
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

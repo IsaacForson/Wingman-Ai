@@ -23,7 +23,13 @@ interface ConversationMessage {
   content: string
   timestamp: string
 }
-export type AIProvider = 'groq' | 'gemini' | 'mistral' | 'claude'
+export type AIProvider = 'groq' | 'nvidia'
+
+// Must match PROVIDER_MODELS in backend/modules/ai/answer_generator.py
+export const PROVIDER_MODELS: Record<AIProvider, string[]> = {
+  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
+  nvidia: ['nvidia/nemotron-3-super-120b-a12b', 'openai/gpt-oss-20b', 'nvidia/nemotron-3.5-lightning-30b-a3b']
+}
 
 interface TranscriptLine {
   id: string
@@ -274,8 +280,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   // AI Provider
   aiProvider: 'groq',
-  aiModel: 'llama-3.3-70b-versatile',
-  availableProviders: ['groq', 'gemini', 'mistral', 'claude'],
+  aiModel: PROVIDER_MODELS.groq[0],
+  availableProviders: ['groq', 'nvidia'],
   setAIProvider: (provider, model) => set({ 
     aiProvider: provider,
     ...(model && { aiModel: model })

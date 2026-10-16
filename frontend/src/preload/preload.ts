@@ -20,8 +20,7 @@ export interface WingmanAPI {
   setShowInDock: (show: boolean) => Promise<void>
   setWindowOpacity: (opacity: number) => Promise<void>
   setHideFromScreenCapture: (hide: boolean) => Promise<void>
-  setIslandPosition: (position: string) => Promise<void>
-  setHotkey: (action: string, keys: string) => Promise<void>
+  setHotkey: (action: string, keys: string) => Promise<boolean>
   
   // App control
   quitApp: () => Promise<void>
@@ -37,6 +36,8 @@ export interface WingmanAPI {
   onOpenSettings: (callback: () => void) => () => void
   onOpenCommandPalette: (callback: () => void) => () => void
   onEmergencyHide: (callback: () => void) => () => void
+  onStartListening: (callback: () => void) => () => void
+  onStopListening: (callback: () => void) => () => void
 
   // App info
   platform: string
@@ -58,7 +59,6 @@ contextBridge.exposeInMainWorld('wingman', {
   setShowInDock: (show: boolean) => ipcRenderer.invoke('set-show-in-dock', show),
   setWindowOpacity: (opacity: number) => ipcRenderer.invoke('set-window-opacity', opacity),
   setHideFromScreenCapture: (hide: boolean) => ipcRenderer.invoke('set-hide-from-screen-capture', hide),
-  setIslandPosition: (position: string) => ipcRenderer.invoke('set-island-position', position),
   setHotkey: (action: string, keys: string) => ipcRenderer.invoke('set-hotkey', action, keys),
   
   // App control
@@ -103,6 +103,18 @@ contextBridge.exposeInMainWorld('wingman', {
     const handler = () => callback()
     ipcRenderer.on('emergency-hide', handler)
     return () => ipcRenderer.removeListener('emergency-hide', handler)
+  },
+
+  onStartListening: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('start-listening', handler)
+    return () => ipcRenderer.removeListener('start-listening', handler)
+  },
+
+  onStopListening: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('stop-listening', handler)
+    return () => ipcRenderer.removeListener('stop-listening', handler)
   },
 
   // App info

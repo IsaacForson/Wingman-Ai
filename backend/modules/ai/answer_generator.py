@@ -1,7 +1,7 @@
 """
 Wingman AI - Answer Generator
 AI-powered answer generation with streaming support
-Supports: Groq, Gemini, Mistral, Claude
+Supports: Groq (primary) with NVIDIA as backup (rotating keys)
 """
 
 from typing import Optional, AsyncGenerator, Dict, Any, Literal, Tuple
@@ -13,31 +13,29 @@ from config import settings
 
 
 # Provider type
-AIProvider = Literal["groq", "gemini", "mistral", "claude"]
+AIProvider = Literal["groq", "nvidia"]
 
 # Model configurations for each provider
 PROVIDER_MODELS = {
     "groq": {
-        "default": "llama-3.3-70b-versatile",
-        "fallback": "llama-3.1-8b-instant",
-        "models": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
+        "default": "openai/gpt-oss-120b",
+        "fallback": "openai/gpt-oss-20b",
+        "models": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
     },
-    "gemini": {
-        "default": "gemini-1.5-flash",
-        "fallback": "gemini-1.5-pro",
-        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
-    },
-    "mistral": {
-        "default": "mistral-large-latest",
-        "fallback": "mistral-small-latest",
-        "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "open-mistral-7b"]
-    },
-    "claude": {
-        "default": "claude-sonnet-4-20250514",
-        "fallback": "claude-3-5-haiku-20241022",
-        "models": ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"]
+    "nvidia": {
+        "default": "nvidia/nemotron-3-super-120b-a12b",
+        "fallback": "openai/gpt-oss-20b",
+        "models": ["nvidia/nemotron-3-super-120b-a12b", "openai/gpt-oss-20b", "nvidia/nemotron-3.5-lightning-30b-a3b"]
     }
 }
+
+PROVIDER_URLS = {
+    "groq": "https://api.groq.com/openai/v1/chat/completions",
+    "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
+}
+
+# A provider/key that doesn't answer within these limits counts as "not responding"
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=30)
 
 
 class AnswerGenerator:
@@ -60,6 +58,9 @@ class AnswerGenerator:
         self.last_used_provider: str = None
         self.last_used_model: str = None
         
+        # NVIDIA key currently in use (rotates on failure)
+        self._nvidia_key_index = 0
+        
         # HTTP session for API calls
         self._http_session: Optional[aiohttp.ClientSession] = None
     
@@ -80,16 +81,10 @@ class AnswerGenerator:
     def get_available_providers(self) -> list[str]:
         """Get list of available providers based on configured API keys"""
         available = []
-        
         if settings.groq_api_key:
             available.append("groq")
-        if settings.google_api_key:
-            available.append("gemini")
-        if settings.mistral_api_key:
-            available.append("mistral")
-        if settings.anthropic_api_key:
-            available.append("claude")
-        
+        if settings.nvidia_keys:
+            available.append("nvidia")
         return available
     
     def set_provider(self, provider: AIProvider):
@@ -238,51 +233,67 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         """Stream answer generation from the selected provider"""
         messages = self._build_messages(question, context, mode, conversation_history)
         
-        provider_methods = {
-            "groq": self._stream_groq,
-            "gemini": self._stream_gemini,
-            "mistral": self._stream_mistral,
-            "claude": self._stream_claude
-        }
+        self.last_used_provider = None
+        self.last_used_model = None
         
-        # Try primary provider
-        if self.provider in provider_methods:
+        # Selected provider first, the other one as backup
+        order = [self.provider] + [p for p in PROVIDER_URLS if p != self.provider]
+        
+        for provider in order:
+            if provider not in self.get_available_providers():
+                continue
+            yielded = False
             try:
-                async for chunk in provider_methods[self.provider](messages):
+                async for chunk in self._stream_provider(provider, messages):
+                    yielded = True
                     yield chunk
                 return
             except Exception as e:
-                logger.error(f"{self.provider} error: {e}")
-        
-        # Try fallback providers
-        fallback_order = ["groq", "gemini", "mistral", "claude"]
-        for fallback in fallback_order:
-            if fallback != self.provider and fallback in self.get_available_providers():
-                try:
-                    logger.info(f"Trying fallback provider: {fallback}")
-                    async for chunk in provider_methods[fallback](messages):
-                        yield chunk
+                logger.error(f"{provider} error: {e}")
+                if yielded:
+                    # Part of the answer is already out; switching now would duplicate it
                     return
-                except Exception as e:
-                    logger.error(f"{fallback} fallback error: {e}")
+                logger.info("Falling back to next provider...")
         
-        yield "Error: No AI provider available. Please configure at least one API key."
+        yield "Error: No AI provider available. Please configure a Groq or NVIDIA API key."
     
-    async def _stream_groq(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Groq (FREE - very fast)"""
-        if not settings.groq_api_key:
-            raise Exception("Groq API key not configured")
+    async def _stream_provider(self, provider: str, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from a provider. For NVIDIA, rotate through keys until one responds."""
+        model = self.default_model if provider == self.provider else PROVIDER_MODELS[provider]["default"]
+        if model not in PROVIDER_MODELS[provider]["models"]:
+            # Stale/retired model name (e.g. from old saved settings)
+            model = PROVIDER_MODELS[provider]["default"]
+        keys = [settings.groq_api_key] if provider == "groq" else settings.nvidia_keys
         
-        model = self.default_model if self.provider == "groq" else PROVIDER_MODELS["groq"]["default"]
+        last_error = None
+        for attempt in range(len(keys)):
+            idx = (self._nvidia_key_index + attempt) % len(keys) if provider == "nvidia" else 0
+            yielded = False
+            try:
+                async for chunk in self._stream_openai_compatible(PROVIDER_URLS[provider], keys[idx], model, messages):
+                    if not yielded:
+                        yielded = True
+                        if provider == "nvidia":
+                            # Stick with the key that worked for the next request
+                            self._nvidia_key_index = idx
+                        self.last_used_provider = provider
+                        self.last_used_model = model
+                        logger.info(f"✅ Using {provider} model {model}" + (f" (key {idx + 1}/{len(keys)})" if provider == "nvidia" else ""))
+                    yield chunk
+                return
+            except Exception as e:
+                if yielded:
+                    raise
+                last_error = e
+                if provider == "nvidia":
+                    logger.warning(f"NVIDIA key {idx + 1}/{len(keys)} failed ({e}), rotating to next key")
         
-        # Track what we're using
-        self.last_used_provider = "groq"
-        self.last_used_model = model
-        logger.info(f"Using Groq model: {model}")
-        
-        url = "https://api.groq.com/openai/v1/chat/completions"
+        raise Exception(f"All {provider} keys failed. Last error: {last_error}")
+    
+    async def _stream_openai_compatible(self, url: str, api_key: str, model: str, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """Stream from an OpenAI-compatible chat completions endpoint (Groq, NVIDIA)"""
         headers = {
-            "Authorization": f"Bearer {settings.groq_api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         payload = {
@@ -293,223 +304,21 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
             "stream": True
         }
         
-        async with self._http_session.post(url, headers=headers, json=payload) as resp:
+        async with self._http_session.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT) as resp:
             if resp.status != 200:
                 error = await resp.text()
-                raise Exception(f"Groq API error: {error}")
+                raise Exception(f"HTTP {resp.status}: {error[:200]}")
             
             async for line in resp.content:
                 line = line.decode('utf-8').strip()
                 if line.startswith('data: ') and line != 'data: [DONE]':
                     try:
                         data = json.loads(line[6:])
-                        content = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                        content = (data.get('choices') or [{}])[0].get('delta', {}).get('content') or ''
                         if content:
                             yield content
                     except json.JSONDecodeError:
                         continue
-    
-    async def _stream_gemini(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Google Gemini (FREE tier available)"""
-        if not settings.google_api_key:
-            raise Exception("Google API key not configured")
-        
-        # Gemini models to try (in order of preference)
-        gemini_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
-        
-        # Convert messages to Gemini format
-        system_instruction = ""
-        contents = []
-        
-        for msg in messages:
-            if msg["role"] == "system":
-                system_instruction += msg["content"] + "\n"
-            elif msg["role"] == "user":
-                contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
-            elif msg["role"] == "assistant":
-                contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
-        
-        payload = {
-            "contents": contents,
-            "systemInstruction": {"parts": [{"text": system_instruction}]} if system_instruction else None,
-            "generationConfig": {
-                "maxOutputTokens": settings.max_tokens,
-                "temperature": settings.temperature
-            }
-        }
-        
-        # Remove None values
-        payload = {k: v for k, v in payload.items() if v is not None}
-        
-        # Try each Gemini model until one works
-        last_error = None
-        for model in gemini_models:
-            try:
-                logger.info(f"Trying Gemini model: {model}")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={settings.google_api_key}"
-                
-                async with self._http_session.post(url, json=payload) as resp:
-                    if resp.status != 200:
-                        error_text = await resp.text()
-                        logger.warning(f"Gemini model {model} failed: {error_text[:200]}")
-                        last_error = error_text
-                        continue  # Try next model
-                    
-                    # Success! Track and stream the response
-                    self.last_used_provider = "gemini"
-                    self.last_used_model = model
-                    logger.info(f"✅ Using Gemini model: {model}")
-                    
-                    async for line in resp.content:
-                        line = line.decode('utf-8').strip()
-                        if line.startswith('data: '):
-                            try:
-                                data = json.loads(line[6:])
-                                text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-                                if text:
-                                    yield text
-                            except json.JSONDecodeError:
-                                continue
-                    return  # Success, exit the function
-                    
-            except Exception as e:
-                logger.warning(f"Gemini model {model} error: {e}")
-                last_error = str(e)
-                continue  # Try next model
-        
-        # All models failed
-        raise Exception(f"All Gemini models failed. Last error: {last_error}")
-    
-    async def _stream_mistral(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Mistral AI"""
-        if not settings.mistral_api_key:
-            raise Exception("Mistral API key not configured")
-        
-        # Mistral models to try
-        mistral_models = ["mistral-large-latest", "mistral-small-latest", "open-mistral-7b"]
-        
-        last_error = None
-        for model in mistral_models:
-            try:
-                logger.info(f"Trying Mistral model: {model}")
-                
-                url = "https://api.mistral.ai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {settings.mistral_api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": settings.max_tokens,
-                    "temperature": settings.temperature,
-                    "stream": True
-                }
-                
-                async with self._http_session.post(url, headers=headers, json=payload) as resp:
-                    if resp.status != 200:
-                        error = await resp.text()
-                        logger.warning(f"Mistral model {model} failed: {error[:200]}")
-                        last_error = error
-                        continue
-                    
-                    # Success! Track and stream
-                    self.last_used_provider = "mistral"
-                    self.last_used_model = model
-                    logger.info(f"✅ Using Mistral model: {model}")
-                    
-                    async for line in resp.content:
-                        line = line.decode('utf-8').strip()
-                        if line.startswith('data: ') and line != 'data: [DONE]':
-                            try:
-                                data = json.loads(line[6:])
-                                content = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                if content:
-                                    yield content
-                            except json.JSONDecodeError:
-                                continue
-                    return
-                    
-            except Exception as e:
-                logger.warning(f"Mistral model {model} error: {e}")
-                last_error = str(e)
-                continue
-        
-        raise Exception(f"All Mistral models failed. Last error: {last_error}")
-    
-    async def _stream_claude(self, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Stream from Anthropic Claude"""
-        if not settings.anthropic_api_key:
-            raise Exception("Anthropic API key not configured")
-        
-        # Claude models to try
-        claude_models = ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"]
-        
-        # Convert messages to Claude format (separate system from messages)
-        system_content = ""
-        claude_messages = []
-        
-        for msg in messages:
-            if msg["role"] == "system":
-                system_content += msg["content"] + "\n"
-            else:
-                claude_messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-        
-        last_error = None
-        for model in claude_models:
-            try:
-                logger.info(f"Trying Claude model: {model}")
-                
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model,
-                    "messages": claude_messages,
-                    "max_tokens": settings.max_tokens,
-                    "stream": True
-                }
-                
-                if system_content.strip():
-                    payload["system"] = system_content.strip()
-                
-                async with self._http_session.post(url, headers=headers, json=payload) as resp:
-                    if resp.status != 200:
-                        error = await resp.text()
-                        logger.warning(f"Claude model {model} failed: {error[:200]}")
-                        last_error = error
-                        continue
-                    
-                    # Success! Track and stream
-                    self.last_used_provider = "claude"
-                    self.last_used_model = model
-                    logger.info(f"✅ Using Claude model: {model}")
-                    
-                    async for line in resp.content:
-                        line = line.decode('utf-8').strip()
-                        if line.startswith('data: '):
-                            try:
-                                data = json.loads(line[6:])
-                                if data.get('type') == 'content_block_delta':
-                                    text = data.get('delta', {}).get('text', '')
-                                    if text:
-                                        yield text
-                            except json.JSONDecodeError:
-                                continue
-                    return
-                    
-            except Exception as e:
-                logger.warning(f"Claude model {model} error: {e}")
-                last_error = str(e)
-                continue
-        
-        raise Exception(f"All Claude models failed. Last error: {last_error}")
     
     async def shutdown(self):
         """Cleanup resources"""

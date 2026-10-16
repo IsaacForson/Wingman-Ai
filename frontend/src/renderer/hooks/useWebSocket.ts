@@ -9,6 +9,9 @@ import { useAppStore } from '../store/appStore'
 import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
 import socketService from '../services/socket'
+import { useSettingsStore, notifyAnswerReady } from '../store/settingsStore'
+
+let hasAutoStarted = false
 
 export function useWebSocket() {
   const {
@@ -35,6 +38,14 @@ export function useWebSocket() {
       console.log('Connected to Wingman backend')
       setConnected(true)
       toast.success('Connected to Wingman AI')
+      // Push saved settings (provider, keys, audio, ...) to the backend
+      const settings = useSettingsStore.getState()
+      settings.syncWithBackend()
+      socketService.emit('get_ai_providers')
+      if (settings.autoStartListening && !hasAutoStarted) {
+        hasAutoStarted = true
+        socketService.startAudio()
+      }
     })
 
     socket.on('disconnect', () => {
@@ -147,7 +158,8 @@ export function useWebSocket() {
 
     socket.on('answer_chunk', (data: { data?: { chunk?: string } }) => {
       const chunk = data.data?.chunk || ''
-      if (chunk) {
+      // With streaming off the full answer appears on answer_complete
+      if (chunk && useSettingsStore.getState().streamResponses) {
         appendToAnswer(chunk)
       }
     })
@@ -170,6 +182,7 @@ export function useWebSocket() {
         addToHistory(finalAnswer)
         setCurrentAnswer(null) // Clear current - it's now in history
         incrementAnswers()
+        notifyAnswerReady(finalAnswer.answer)
       }
       
       // Update active conversation if returned from backend
@@ -218,6 +231,8 @@ export function useWebSocket() {
     socket.on('ai_provider_changed', (data: { provider?: string; model?: string }) => {
       if (data.provider) {
         setAIProvider(data.provider as any, data.model)
+        // Keep the Settings panel in step when switching from the island
+        useSettingsStore.setState({ aiProvider: data.provider as any, ...(data.model && { aiModel: data.model }) })
         toast.success(`Switched to ${data.provider}`)
       }
     })
@@ -270,6 +285,7 @@ export function useWebSocket() {
       setCurrentAnswer(answerEntry)
       addToHistory(answerEntry)
       incrementAnswers()
+      notifyAnswerReady(answerEntry.answer)
       
       // Update active conversation if returned from backend
       if (data.conversation_id) {
@@ -277,8 +293,9 @@ export function useWebSocket() {
       }
     })
 
-    // Request AI providers on connect
-    socketService.emit('get_ai_providers')
+    socket.on('capture_error', (data: { error?: string }) => {
+      toast.error(data.error || 'Screen capture failed')
+    })
 
   }, [
     setConnected, setListening, setProcessing, setIslandState,

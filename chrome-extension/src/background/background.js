@@ -32,8 +32,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   
   // Set defaults
   await chrome.storage.local.set({
-    aiProvider: 'gemini',
-    aiModel: 'gemini-1.5-flash'
+    aiProvider: 'groq',
+    aiModel: 'openai/gpt-oss-120b'
   });
   
   // Set initial badge
@@ -273,6 +273,42 @@ async function checkBackendConnection() {
 
 // Check connection periodically
 setInterval(checkBackendConnection, 10000);
+
+// ============================================
+// DESKTOP APP CAPTURE BUTTON
+// The desktop app asks for a capture over this socket
+// ============================================
+
+let captureSocket = null;
+
+function connectCaptureSocket() {
+  if (captureSocket && captureSocket.readyState <= WebSocket.OPEN) return;
+  try {
+    captureSocket = new WebSocket(`${BACKEND_URL.replace('http', 'ws')}/ws/extension`);
+  } catch (e) {
+    return;
+  }
+  captureSocket.onmessage = (event) => {
+    if (event.data === 'capture') {
+      console.log('🖥️ Capture requested from desktop app');
+      stealthCapture();
+    }
+  };
+  captureSocket.onclose = () => { captureSocket = null; };
+  captureSocket.onerror = () => {};
+}
+
+// Pinging every 20s keeps the service worker (and socket) alive
+setInterval(() => {
+  if (captureSocket?.readyState === WebSocket.OPEN) captureSocket.send('ping');
+  else connectCaptureSocket();
+}, 20000);
+
+// Wakes the worker back up if Chrome put it to sleep (e.g. backend was down)
+chrome.alarms.create('wingman-reconnect', { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener(connectCaptureSocket);
+
+connectCaptureSocket();
 
 // ============================================
 // MESSAGE HANDLING (from content scripts)

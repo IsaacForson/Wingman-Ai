@@ -22,7 +22,6 @@ import {
   FlaskConical,
   Dumbbell,
   Zap,
-  Sparkles,
   Cpu,
   History,
   Trash2,
@@ -198,7 +197,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
       {
         id: "ai-groq",
         label: "Use Groq",
-        description: "Ultra-fast Llama models (FREE)",
+        description: "Ultra-fast GPT-OSS models (FREE)",
         icon: <Zap className="w-4 h-4 text-orange-400" />,
         action: () => {
           setAIProvider("groq");
@@ -208,38 +207,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
         category: "ai",
       },
       {
-        id: "ai-gemini",
-        label: "Use Google Gemini",
-        description: "Gemini 1.5 Flash (FREE)",
-        icon: <Sparkles className="w-4 h-4 text-blue-400" />,
+        id: "ai-nvidia",
+        label: "Use NVIDIA",
+        description: "NVIDIA as primary (Groq becomes the backup)",
+        icon: <Cpu className="w-4 h-4 text-green-400" />,
         action: () => {
-          setAIProvider("gemini");
-          setAIProviderBackend("gemini");
-          toast.success("Switched to Gemini");
-        },
-        category: "ai",
-      },
-      {
-        id: "ai-mistral",
-        label: "Use Mistral",
-        description: "Mistral Large & Small models",
-        icon: <Cpu className="w-4 h-4 text-purple-400" />,
-        action: () => {
-          setAIProvider("mistral");
-          setAIProviderBackend("mistral");
-          toast.success("Switched to Mistral");
-        },
-        category: "ai",
-      },
-      {
-        id: "ai-claude",
-        label: "Use Claude",
-        description: "Anthropic Claude (Paid)",
-        icon: <Brain className="w-4 h-4 text-amber-400" />,
-        action: () => {
-          setAIProvider("claude");
-          setAIProviderBackend("claude");
-          toast.success("Switched to Claude");
+          setAIProvider("nvidia");
+          setAIProviderBackend("nvidia");
+          toast.success("Switched to NVIDIA");
         },
         category: "ai",
       },
