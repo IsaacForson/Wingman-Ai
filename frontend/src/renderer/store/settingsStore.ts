@@ -8,6 +8,7 @@ import { persist } from 'zustand/middleware'
 import toast from 'react-hot-toast'
 import socketService from '../services/socket'
 import { useAppStore, AIProvider, PROVIDER_MODELS } from './appStore'
+import { loadTabs } from '../services/tabs'
 
 export type WhisperModel = 'tiny' | 'base' | 'small' | 'medium' | 'large'
 export type IslandPosition = 'top' | 'top-left' | 'top-right' | 'bottom' | 'bottom-left' | 'bottom-right'
@@ -392,6 +393,8 @@ export const useSettingsStore = create<SettingsState>()(
         useAppStore.getState().clearHistory()
         get().resetToDefaults()
         await fetch('http://localhost:8765/api/conversations', { method: 'DELETE' }).catch(() => {})
+        useAppStore.setState({ tabs: [], activeConversationId: null })
+        await loadTabs()  // starts one fresh chat
       },
     }),
     {

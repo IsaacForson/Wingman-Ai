@@ -102,6 +102,8 @@ const ModeSelector: React.FC<ModeSelectorProps> = ({ compact = false }) => {
       }
       
       setMode(newMode)
+      // Mode belongs to the chat tab
+      if (activeConversationId) useAppStore.getState().updateTab(activeConversationId, { mode: newMode })
       toast.success(`Switched to ${newMode} mode`)
     } catch (error) {
       console.error('Failed to change mode:', error)

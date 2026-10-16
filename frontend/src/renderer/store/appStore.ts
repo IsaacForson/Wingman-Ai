@@ -39,7 +39,7 @@ interface TranscriptLine {
   isFinal: boolean
 }
 
-interface Answer {
+export interface Answer {
   id: string
   question: string
   answer: string
@@ -48,6 +48,16 @@ interface Answer {
   source: 'audio' | 'screen' | 'manual'
   provider?: string
   model?: string
+  conversationId?: string  // which chat tab this belongs to
+}
+
+// One chat tab = one backend conversation with its own history, mode and AI
+export interface ChatTab {
+  id: string
+  title: string
+  mode: OperatingMode
+  provider: AIProvider | null  // null = the default AI from Settings
+  model: string | null
 }
 
 interface AppState {
@@ -85,8 +95,12 @@ interface AppState {
   setCurrentAnswer: (answer: Answer | null) => void
   appendToAnswer: (chunk: string) => void
   
-  // Answer history
-  answerHistory: Answer[]
+  // Chat tabs and each tab's messages
+  tabs: ChatTab[]
+  setTabs: (tabs: ChatTab[]) => void
+  updateTab: (id: string, changes: Partial<ChatTab>) => void
+  messagesByConv: Record<string, Answer[]>
+  setMessages: (conversationId: string, messages: Answer[]) => void
   addToHistory: (answer: Answer) => void
   clearHistory: () => void
   
@@ -215,12 +229,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   }),
   
-  // Answer history
-  answerHistory: [],
-  addToHistory: (answer) => set((state) => ({
-    answerHistory: [...state.answerHistory.slice(-20), answer] // Keep last 20
+  // Chat tabs
+  tabs: [],
+  setTabs: (tabs) => set({ tabs }),
+  updateTab: (id, changes) => set((state) => ({
+    tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...changes } : t))
   })),
-  clearHistory: () => set({ answerHistory: [] }),
+  messagesByConv: {},
+  setMessages: (conversationId, messages) => set((state) => ({
+    messagesByConv: { ...state.messagesByConv, [conversationId]: messages }
+  })),
+  addToHistory: (answer) => set((state) => {
+    const id = answer.conversationId || state.activeConversationId || 'none'
+    const list = state.messagesByConv[id] || []
+    return { messagesByConv: { ...state.messagesByConv, [id]: [...list.slice(-50), answer] } }
+  }),
+  clearHistory: () => set({ messagesByConv: {} }),
   
   // Current question
   currentQuestion: null,
@@ -297,3 +321,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setConversationHistoryOpen: (open) => set({ isConversationHistoryOpen: open })
 }))
 
+
+// Messages of the open tab
+export const useActiveMessages = () =>
+  useAppStore((state) => state.messagesByConv[state.activeConversationId || 'none'] || EMPTY)
+const EMPTY: Answer[] = []

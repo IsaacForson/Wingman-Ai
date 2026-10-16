@@ -198,6 +198,30 @@ class AnalyzeRequest(BaseModel):
     route_to_electron: bool = False  # If true, emit answer to Electron via WebSocket
 
 
+def _capture_prompt(content: str, kind: str) -> str:
+    """Prompt for analyzing captured page text"""
+    if kind in ["screen", "extension_capture"]:
+        return f"""Analyze the following content and provide a helpful answer or solution.
+
+IMPORTANT FORMATTING RULES:
+- For code, ALWAYS use markdown code blocks with the language specified: ```python, ```javascript, etc.
+- For multiple choice questions, clearly state the correct answer (e.g., "The correct answer is B") and explain why
+- Keep explanations concise but complete
+- Use bullet points for lists
+
+Content to analyze:
+{content}
+
+Provide your response:"""
+    return f"""Answer the following question clearly and concisely.
+
+FORMATTING: If your answer includes code, use markdown code blocks with the language: ```python, ```javascript, etc.
+
+Question: {content}
+
+Answer:"""
+
+
 @app.post("/api/analyze")
 async def analyze_content(request: AnalyzeRequest):
     """
@@ -217,82 +241,36 @@ async def analyze_content(request: AnalyzeRequest):
     try:
         generator = engine._ai_module.answer_generator
         
-        # Temporarily switch provider if specified (for this request only)
-        original_provider = generator.provider
-        original_model = generator.default_model
-        
-        if request.provider:
-            logger.info(f"🔄 Switching to provider: {request.provider}")
-            generator.set_provider(request.provider)
-            if request.model:
-                generator.default_model = request.model
-        
-        # Emit "processing" event to Electron if routing
         if request.route_to_electron:
-            await sio.emit('extension_capture', {
-                'status': 'processing',
-                'question': content[:300] + '...' if len(content) > 300 else content,
-                'source': request.type
-            })
+            # Answer in the chat tab that's open in the app (its AI, mode and history)
+            await engine.process_capture(
+                display=("📄 " + content[:300] + ("…" if len(content) > 300 else "")),
+                prompt=_capture_prompt(content, request.type),
+                source=request.type,
+            )
+            return {"routed_to_electron": True}
         
-        # Build prompt based on content type
-        if request.type in ["screen", "extension_capture"]:
-            prompt = f"""Analyze the following content and provide a helpful answer or solution.
-
-IMPORTANT FORMATTING RULES:
-- For code, ALWAYS use markdown code blocks with the language specified: ```python, ```javascript, etc.
-- For multiple choice questions, clearly state the correct answer (e.g., "The correct answer is B") and explain why
-- Keep explanations concise but complete
-- Use bullet points for lists
-
-Content to analyze:
-{content}
-
-Provide your response:"""
-        else:
-            prompt = f"""Answer the following question clearly and concisely.
-
-FORMATTING: If your answer includes code, use markdown code blocks with the language: ```python, ```javascript, etc.
-
-Question: {content}
-
-Answer:"""
-        
-        # Generate answer (non-streaming for REST)
+        # Generate answer (non-streaming for REST); provider/model apply to this request only
         answer_chunks = []
-        async for chunk in generator.generate_stream(prompt):
+        async for chunk in generator.generate_stream(
+            _capture_prompt(content, request.type), provider=request.provider, model=request.model
+        ):
             answer_chunks.append(chunk)
         
         full_answer = "".join(answer_chunks)
         
-        # Report what actually answered (may be the NVIDIA backup)
+        # Report what actually answered (may be the backup provider)
         used_provider = generator.last_used_provider or generator.provider
         used_model = generator.last_used_model or generator.default_model
         
-        # Restore original provider if we switched
-        if request.provider and original_provider != request.provider:
-            generator.set_provider(original_provider)
-            generator.default_model = original_model
-        
         logger.info(f"✅ Generated answer using {used_provider}: {len(full_answer)} chars")
-        
-        # 🚀 ROUTE TO ELECTRON: Emit answer via WebSocket so Electron can display it
-        if request.route_to_electron:
-            logger.info("📤 Routing answer to Electron desktop app...")
-            await sio.emit('extension_answer', {
-                'question': content[:300] + '...' if len(content) > 300 else content,
-                'answer': full_answer,
-                'provider': used_provider,
-                'model': used_model,
-                'source': request.type
-            })
         
         return {
             "question": content[:200] + "..." if len(content) > 200 else content,
             "answer": full_answer,
             "provider": used_provider,
             "model": used_model,
-            "routed_to_electron": request.route_to_electron
+            "routed_to_electron": False
         }
         
     except Exception as e:
@@ -354,27 +332,6 @@ async def request_extension_capture() -> int:
     return sent
 
 
-@app.get("/api/test-extension")
-async def test_extension_flow():
-    """
-    Test endpoint to verify Electron receives extension answers.
-    Visit http://localhost:8765/api/test-extension in your browser.
-    """
-    logger.info("🧪 TEST: Sending test answer to Electron...")
-    
-    await sio.emit('extension_answer', {
-        'question': 'Test question from backend',
-        'answer': '**This is a test answer!**\n\nIf you see this in the Dynamic Island, the flow works! 🎉',
-        'provider': 'test',
-        'model': 'test',
-        'source': 'test_endpoint'
-    })
-    
-    logger.info("✅ TEST: Emitted extension_answer event")
-    
-    return {"status": "ok", "message": "Test answer sent to Electron. Check Dynamic Island!"}
-
-
 # ============================================
 # Conversation History API
 # ============================================
@@ -390,11 +347,22 @@ async def list_conversations():
 
 
 @app.post("/api/conversations")
-async def create_conversation(mode: str = "interview"):
-    """Create a new conversation"""
+async def create_conversation(mode: str = "interview", provider: str = None, model: str = None):
+    """Create a new conversation (a chat tab), optionally with its own AI"""
     conv_manager = get_conversation_manager()
-    conv = conv_manager.create_conversation(mode)
-    return {"id": conv.id, "mode": conv.mode, "created": True}
+    conv = conv_manager.create_conversation(mode, provider, model)
+    return {"id": conv.id, "mode": conv.mode, "provider": conv.provider, "model": conv.model, "created": True}
+
+
+@app.post("/api/conversations/{conv_id}/ai")
+async def set_conversation_ai(conv_id: str, provider: str, model: str = None):
+    """Choose the AI for one chat tab"""
+    if provider not in PROVIDER_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    conv = get_conversation_manager().set_ai(conv_id, provider, model)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"id": conv.id, "provider": conv.provider, "model": conv.model}
 
 
 @app.get("/api/conversations/{conv_id}")
@@ -449,123 +417,6 @@ async def cleanup_expired_conversations(hours: int = 48):
     conv_manager = get_conversation_manager()
     conv_manager.cleanup_expired(hours)
     return {"cleaned_up": True, "hours": hours}
-
-
-# Request model for conversational analyze endpoint
-class ConversationalAnalyzeRequest(BaseModel):
-    content: str
-    conversation_id: str = None  # Optional: use existing conversation
-    mode: str = "interview"
-    provider: str = None
-    model: str = None
-    route_to_electron: bool = False
-
-
-@app.post("/api/analyze/conversational")
-async def analyze_conversational(request: ConversationalAnalyzeRequest):
-    """
-    Analyze content with conversation history context.
-    Maintains conversation continuity across requests.
-    """
-    logger.info(f"📝 Conversational analyze: mode={request.mode}, conv_id={request.conversation_id}")
-    
-    if not engine or not engine._ai_module:
-        raise HTTPException(status_code=503, detail="Engine not initialized")
-    
-    content = request.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="No content provided")
-    
-    try:
-        conv_manager = get_conversation_manager()
-        generator = engine._ai_module.answer_generator
-        
-        # Get or create conversation
-        if request.conversation_id:
-            conv = conv_manager.get_conversation(request.conversation_id)
-            if not conv:
-                conv = conv_manager.create_conversation(request.mode)
-        else:
-            # Use active conversation or create new
-            conv = conv_manager.get_active_conversation()
-            if not conv:
-                conv = conv_manager.create_conversation(request.mode)
-        
-        # Get conversation history for context
-        history = conv.get_context_messages(limit=10)
-        
-        # Add user message to conversation
-        conv_manager.add_message("user", content, conv.id)
-        
-        # Temporarily switch provider if specified
-        original_provider = generator.provider
-        original_model = generator.default_model
-        
-        if request.provider:
-            generator.set_provider(request.provider)
-            if request.model:
-                generator.default_model = request.model
-        
-        # Emit processing event
-        if request.route_to_electron:
-            await sio.emit('extension_capture', {
-                'status': 'processing',
-                'question': content[:300],
-                'conversation_id': conv.id,
-                'source': 'conversational'
-            })
-        
-        # Generate answer with conversation history
-        answer_chunks = []
-        async for chunk in generator.generate_stream(
-            content, 
-            mode=conv.mode,
-            conversation_history=history
-        ):
-            answer_chunks.append(chunk)
-        
-        full_answer = "".join(answer_chunks)
-        
-        # Add assistant response to conversation
-        conv_manager.add_message("assistant", full_answer, conv.id)
-        
-        # Report what actually answered (may be the NVIDIA backup)
-        used_provider = generator.last_used_provider or generator.provider
-        used_model = generator.last_used_model or generator.default_model
-        
-        # Restore original provider
-        if request.provider and original_provider != request.provider:
-            generator.set_provider(original_provider)
-            generator.default_model = original_model
-        
-        logger.info(f"✅ Conversational answer using {used_provider}: {len(full_answer)} chars")
-        
-        # Route to Electron
-        if request.route_to_electron:
-            await sio.emit('extension_answer', {
-                'question': content[:300],
-                'answer': full_answer,
-                'provider': used_provider,
-                'model': used_model,
-                'conversation_id': conv.id,
-                'mode': conv.mode,
-                'source': 'conversational'
-            })
-        
-        return {
-            "question": content[:200] + "..." if len(content) > 200 else content,
-            "answer": full_answer,
-            "provider": used_provider,
-            "model": used_model,
-            "conversation_id": conv.id,
-            "mode": conv.mode,
-            "message_count": len(conv.messages),
-            "routed_to_electron": request.route_to_electron
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Conversational analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/analyze/stream")

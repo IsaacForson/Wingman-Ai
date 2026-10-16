@@ -6,7 +6,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, AIProvider, PROVIDER_MODELS } from '../../store/appStore'
-import { useWebSocket } from '../../hooks/useWebSocket'
+import { setTabAI } from '../../services/tabs'
 import { 
   Zap, 
   Cpu,
@@ -43,21 +43,23 @@ interface AIProviderSelectorProps {
 }
 
 const AIProviderSelector: React.FC<AIProviderSelectorProps> = ({ compact = false }) => {
-  const { aiProvider, aiModel, availableProviders, setAIProvider } = useAppStore()
-  const { setAIProvider: setAIProviderBackend } = useWebSocket()
+  // Edits the open chat tab's AI; tabs without their own choice use the default from Settings
+  const { aiProvider: defaultProvider, aiModel: defaultModel, availableProviders, tabs, activeConversationId } = useAppStore()
+  const tab = tabs.find((t) => t.id === activeConversationId)
+  const aiProvider: AIProvider = tab?.provider || defaultProvider
+  const aiModel = tab?.model || (tab?.provider ? PROVIDER_MODELS[aiProvider][0] : defaultModel)
   const [isOpen, setIsOpen] = useState(false)
 
+  const choose = (provider: AIProvider, model: string) => {
+    if (activeConversationId) setTabAI(activeConversationId, provider, model)
+  }
+
   const handleProviderSelect = (provider: AIProvider) => {
-    const defaultModel = PROVIDER_MODELS[provider]?.[0] || ''
-    setAIProvider(provider, defaultModel)
-    setAIProviderBackend(provider, defaultModel)
+    choose(provider, PROVIDER_MODELS[provider]?.[0] || '')
     setIsOpen(false)
   }
 
-  const handleModelSelect = (model: string) => {
-    setAIProvider(aiProvider, model)
-    setAIProviderBackend(aiProvider, model)
-  }
+  const handleModelSelect = (model: string) => choose(aiProvider, model)
 
   const currentInfo = PROVIDER_INFO[aiProvider]
 
@@ -121,6 +123,10 @@ const AIProviderSelector: React.FC<AIProviderSelectorProps> = ({ compact = false
           </span>
         )}
       </div>
+
+      <p className="text-[11px] text-white/40">
+        Applies to this chat only. The default for new chats is in Settings → AI Models.
+      </p>
 
       {/* Model Selector */}
       <div className="space-y-2">

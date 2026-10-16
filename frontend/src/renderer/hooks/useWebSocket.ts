@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
 import socketService from '../services/socket'
 import { useSettingsStore, notifyAnswerReady, requestScreenshot } from '../store/settingsStore'
+import { loadTabs, nameTabFromQuestion } from '../services/tabs'
 
 let hasAutoStarted = false
 
@@ -42,6 +43,7 @@ export function useWebSocket() {
       const settings = useSettingsStore.getState()
       settings.syncWithBackend()
       socketService.emit('get_ai_providers')
+      loadTabs()
       if (settings.autoStartListening && !hasAutoStarted) {
         hasAutoStarted = true
         socketService.startAudio()
@@ -119,6 +121,8 @@ export function useWebSocket() {
     // Question events
     socket.on('question_detected', (data: { data?: { text?: string; source?: 'audio' | 'screen' | 'manual' } }) => {
       const question = data.data?.text || ''
+      // Backend skips questions while it's still answering; don't clobber the answer in progress
+      if (useAppStore.getState().currentAnswer?.isStreaming) return
       setCurrentQuestion(question)
       incrementQuestions()
       
@@ -142,7 +146,7 @@ export function useWebSocket() {
     // Answer events - debounced to prevent flickering
     let isGenerating = false
     
-    socket.on('answer_generating', () => {
+    socket.on('answer_generating', (data: { data?: { conversation_id?: string } }) => {
       if (isGenerating) return // Prevent duplicate processing
       isGenerating = true
       
@@ -150,9 +154,10 @@ export function useWebSocket() {
       setProcessing(true)
       setIslandState('expanded') // Show expanded view immediately
       
+      // Tag the answer with its tab so it stays there if you switch tabs meanwhile
       const currentAnswer = useAppStore.getState().currentAnswer
-      if (currentAnswer && !currentAnswer.isStreaming) {
-        setCurrentAnswer({ ...currentAnswer, isStreaming: true })
+      if (currentAnswer) {
+        setCurrentAnswer({ ...currentAnswer, isStreaming: true, conversationId: data.data?.conversation_id })
       }
     })
 
@@ -176,18 +181,21 @@ export function useWebSocket() {
           answer: data.data?.answer || currentAnswer.answer,
           isStreaming: false,
           provider: data.data?.provider,
-          model: data.data?.model
+          model: data.data?.model,
+          conversationId: data.data?.conversation_id || currentAnswer.conversationId
         }
         // Add to history and clear currentAnswer to avoid duplicates
         addToHistory(finalAnswer)
+        if (finalAnswer.conversationId) nameTabFromQuestion(finalAnswer.conversationId, finalAnswer.question)
         setCurrentAnswer(null) // Clear current - it's now in history
         incrementAnswers()
         notifyAnswerReady(finalAnswer.answer)
       }
       
-      // Update active conversation if returned from backend
-      if (data.data?.conversation_id) {
-        useAppStore.getState().setActiveConversationId(data.data.conversation_id)
+      // Backend started a conversation the app doesn't know yet: refresh the tabs
+      const convId = data.data?.conversation_id
+      if (convId && !useAppStore.getState().tabs.some((t) => t.id === convId)) {
+        loadTabs()
       }
     })
 
@@ -234,62 +242,6 @@ export function useWebSocket() {
         // Keep the Settings panel in step when switching from the island
         useSettingsStore.setState({ aiProvider: data.provider as any, ...(data.model && { aiModel: data.model }) })
         toast.success(`Switched to ${data.provider}`)
-      }
-    })
-
-    // ============================================
-    // 🥷 EXTENSION CAPTURE EVENTS (Stealth Mode)
-    // Receives answers from Chrome Extension via backend
-    // ============================================
-    
-    socket.on('extension_capture', (data: { status?: string; question?: string; source?: string }) => {
-      console.log('[Socket] 🥷 Extension capture:', data.status)
-      
-      if (data.status === 'processing') {
-        // Show processing state - no toast, UI shows it
-        setProcessing(true)
-        setIslandState('expanded')
-        
-        // Set the question
-        if (data.question) {
-          setCurrentQuestion(data.question)
-          setCurrentAnswer({
-            id: uuidv4(),
-            question: data.question,
-            answer: '',
-            isStreaming: true,
-            timestamp: new Date(),
-            source: 'extension' as any
-          })
-        }
-      }
-    })
-
-    socket.on('extension_answer', (data: { question?: string; answer?: string; provider?: string; model?: string; source?: string; conversation_id?: string; mode?: string }) => {
-      console.log('[Socket] 🥷 Extension answer received via', data.provider)
-      
-      setProcessing(false)
-      setIslandState('expanded')
-      
-      const answerEntry = {
-        id: uuidv4(),
-        question: data.question || 'Extension Capture',
-        answer: data.answer || '',
-        isStreaming: false,
-        timestamp: new Date(),
-        source: 'extension' as any,
-        provider: data.provider,
-        model: data.model
-      }
-      
-      setCurrentAnswer(answerEntry)
-      addToHistory(answerEntry)
-      incrementAnswers()
-      notifyAnswerReady(answerEntry.answer)
-      
-      // Update active conversation if returned from backend
-      if (data.conversation_id) {
-        useAppStore.getState().setActiveConversationId(data.conversation_id)
       }
     })
 

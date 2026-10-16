@@ -216,14 +216,17 @@ class WingmanEngine:
     
     async def _on_question_detected(self, event: Event):
         """Handle question detection with conversation context"""
-        if self._is_processing:
-            logger.debug("Already processing a question, skipping")
-            return
-        
         question_text = event.data.get("text", "")
         source = event.data.get("source", "unknown")
+        
+        if self._is_processing:
+            logger.debug("Already processing a question, skipping")
+            if source != "audio":  # you asked on purpose, so say why nothing happens
+                await event_bus.emit(EventType.SYSTEM_ERROR, {"error": "Still answering the previous question. Try again in a moment."}, "engine")
+            return
+        
         conversation_id = event.data.get("conversation_id")
-        mode = event.data.get("mode", self.mode.value)
+        mode = event.data.get("mode")  # None = the conversation's own mode
         
         logger.info(f"Question detected from {source}: {question_text[:100]}... (conv: {conversation_id})")
         
@@ -236,7 +239,10 @@ class WingmanEngine:
         try:
             # Generate answer with conversation context
             if self._ai_module:
-                await self._generate_answer(question_text, source, conversation_id, mode, event.data.get("image"))
+                await self._generate_answer(
+                    question_text, source, conversation_id, mode,
+                    image=event.data.get("image"), prompt=event.data.get("prompt")
+                )
         finally:
             self._is_processing = False
     
@@ -259,9 +265,20 @@ class WingmanEngine:
         # Could auto-switch modes based on active app
         logger.debug(f"Active app changed: {app_name}")
     
-    async def _generate_answer(self, question: str, source: str, conversation_id: str = None, mode: str = None, image: str = None):
-        """Generate an answer for a detected question with conversation history"""
+    async def _generate_answer(self, question: str, source: str, conversation_id: str = None, mode: str = None,
+                               image: str = None, prompt: str = None):
+        """Answer into one conversation (chat tab), using that tab's mode and AI.
+        question: what the chat shows. prompt: what the AI gets, if different (e.g. a captured page)."""
         from modules.conversation import get_conversation_manager
+        
+        conv_manager = get_conversation_manager()
+        # Questions without a tab (voice, captures) go to the tab that's open in the app
+        conv = (conversation_id and conv_manager.get_conversation(conversation_id)) \
+            or conv_manager.get_active_conversation() \
+            or conv_manager.create_conversation(mode or self.mode.value)
+        conversation_id = conv.id
+        mode = mode or conv.mode or self.mode.value
+        ai_text = prompt or question
         
         await event_bus.emit(EventType.ANSWER_GENERATING, {
             "question": question,
@@ -270,42 +287,28 @@ class WingmanEngine:
         }, "engine")
         
         try:
-            # Get conversation history for context
-            conv_manager = get_conversation_manager()
-            conversation_history = []
-            
-            if conversation_id:
-                conversation_history = conv_manager.get_context_for_ai(conversation_id, limit=10)
-                # Add user question to conversation
-                conv_manager.add_message("user", question, conversation_id)
-            else:
-                # Use active conversation or create new
-                conv = conv_manager.get_active_conversation()
-                if conv:
-                    conversation_history = conv.get_context_messages(limit=10)
-                    conv_manager.add_message("user", question, conv.id)
-                    conversation_id = conv.id
-                else:
-                    conv = conv_manager.create_conversation(mode or self.mode.value)
-                    conv_manager.add_message("user", question, conv.id)
-                    conversation_id = conv.id
+            conversation_history = conv.get_context_messages(limit=10)
+            # Keep huge captured pages from flooding later follow-ups
+            conv_manager.add_message("user", ai_text[:8000], conversation_id, display=question if prompt else None)
             
             # Get RAG context
-            context = await self._get_context(question, mode or self.mode.value)
+            context = await self._get_context(question, mode)
             
             # Stream answer generation with conversation history
             answer_chunks = []
             async for chunk in self._ai_module.generate_answer_stream(
-                question=question,
+                question=ai_text,
                 context=context,
-                mode=mode or self.mode.value,
+                mode=mode,
                 conversation_history=conversation_history,
-                image=image
+                image=image,
+                provider=conv.provider,
+                model=conv.model
             ):
                 answer_chunks.append(chunk)
                 await event_bus.emit(EventType.ANSWER_CHUNK, {
                     "chunk": chunk,
-                    "question": question
+                    "conversation_id": conversation_id
                 }, "engine")
             
             full_answer = "".join(answer_chunks)
@@ -314,8 +317,7 @@ class WingmanEngine:
             provider, model = self._ai_module.get_last_used_provider_info() if self._ai_module else (None, None)
             
             # Add assistant response to conversation
-            if conversation_id:
-                conv_manager.add_message("assistant", full_answer, conversation_id)
+            conv_manager.add_message("assistant", full_answer, conversation_id)
             
             if self.session:
                 self.session.answers_count += 1
@@ -335,6 +337,7 @@ class WingmanEngine:
             logger.error(f"Error generating answer: {e}")
             await event_bus.emit(EventType.ANSWER_ERROR, {
                 "question": question,
+                "conversation_id": conversation_id,
                 "error": str(e)
             }, "engine")
     
@@ -409,7 +412,15 @@ class WingmanEngine:
             "source": "screen",
             "image": image,  # stripped before events go to the app
             "conversation_id": conversation_id,
-            "mode": mode or self.mode.value
+            "mode": mode  # None = the conversation's own mode
+        }, "engine")
+    
+    async def process_capture(self, display: str, prompt: str, source: str):
+        """Answer a captured page/selection in the open chat tab (shows `display`, sends `prompt`)"""
+        await event_bus.emit(EventType.QUESTION_DETECTED, {
+            "text": display,
+            "prompt": prompt,  # stripped before events go to the app
+            "source": source,
         }, "engine")
     
     async def process_manual_question(self, question: str, conversation_id: str = None, mode: str = None):
@@ -418,7 +429,7 @@ class WingmanEngine:
             "text": question,
             "source": "manual",
             "conversation_id": conversation_id,
-            "mode": mode or self.mode.value
+            "mode": mode  # None = the conversation's own mode
         }, "engine")
     
     async def get_status(self) -> Dict[str, Any]:

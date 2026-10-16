@@ -42,22 +42,24 @@ interface HistoryViewProps {
 }
 
 const HistoryView: React.FC<HistoryViewProps> = ({ isOpen, onClose }) => {
-  const { answerHistory } = useAppStore()
+  const { messagesByConv, tabs } = useAppStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedMode, setSelectedMode] = useState<string | null>(null)
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Convert store history to display format
-  const historyItems: HistoryItem[] = answerHistory.map((item) => ({
-    id: item.id,
-    question: item.question,
-    answer: item.answer,
-    source: item.source,
-    mode: 'interview', // Default mode
-    timestamp: item.timestamp.toISOString()
-  }))
+  // Every open chat tab's messages, newest first
+  const historyItems: HistoryItem[] = Object.entries(messagesByConv)
+    .flatMap(([convId, items]) => items.map((item) => ({
+      id: item.id,
+      question: item.question,
+      answer: item.answer,
+      source: item.source,
+      mode: tabs.find((t) => t.id === convId)?.mode || 'interview',
+      timestamp: new Date(item.timestamp).toISOString()
+    })))
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 
   // Filter history
   const filteredHistory = historyItems.filter((item) => {

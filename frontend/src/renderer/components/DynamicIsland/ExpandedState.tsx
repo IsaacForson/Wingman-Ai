@@ -5,7 +5,8 @@
 
 import React, { useRef, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAppStore } from '../../store/appStore'
+import { useAppStore, useActiveMessages } from '../../store/appStore'
+import { newTab, switchTab, closeTab, clearTab } from '../../services/tabs'
 import { 
   X, 
   Copy, 
@@ -27,7 +28,8 @@ import {
   Loader2,
   ScanText,
   Send,
-  Camera
+  Camera,
+  Plus
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -65,18 +67,23 @@ const ExpandedState = () => {
   const { 
     currentQuestion, 
     currentAnswer,
-    answerHistory,
     islandState,
     setIslandState,
     isProcessing,
     isListening,
-    aiProvider,
+    aiProvider: defaultProvider,
+    aiModel: defaultModel,
+    activeConversationId,
+    tabs,
     setCurrentAnswer,
     setCurrentQuestion,
     setProcessing,
     setSettingsOpen,
-    clearHistory
   } = useAppStore()
+  const answerHistory = useActiveMessages()
+  const activeTab = tabs.find((t) => t.id === activeConversationId)
+  const tabProvider = activeTab?.provider || defaultProvider
+  const tabModel = activeTab?.model || (activeTab?.provider ? '' : defaultModel)
   
   const [copied, setCopied] = useState(false)
   const [showAISelector, setShowAISelector] = useState(false)
@@ -103,10 +110,9 @@ const ExpandedState = () => {
     setIslandState('normal')
   }
 
-  const handleClearChat = () => {
-    if (confirm('Clear all conversation history?')) {
-      clearHistory()
-      setCurrentAnswer(null)
+  const handleClearChat = async () => {
+    if (activeConversationId && confirm('Clear this chat?')) {
+      await clearTab(activeConversationId)
       setCurrentQuestion(null)
       toast.success('Chat cleared')
     }
@@ -166,7 +172,7 @@ const ExpandedState = () => {
   const showCurrent = currentAnswer && (
     currentAnswer.isStreaming || 
     (currentAnswer.question && !currentAnswer.answer)
-  )
+  ) && (!currentAnswer.conversationId || currentAnswer.conversationId === activeConversationId)
   
   const allMessages = [
     ...answerHistory,
@@ -195,8 +201,11 @@ const ExpandedState = () => {
             {isProcessing ? 'Generating...' : 'Chat'}
           </span>
           <ModeSelector compact />
-          <span className="text-[10px] text-white/30 px-1.5 py-0.5 bg-white/5 rounded">
-            {aiProvider}
+          <span
+            className="text-[10px] text-white/30 px-1.5 py-0.5 bg-white/5 rounded"
+            title={`This chat's AI: ${tabProvider}${tabModel ? ' · ' + tabModel : ''}`}
+          >
+            {tabProvider === 'nvidia' ? 'NVIDIA' : 'Groq'}{tabModel ? ` · ${tabModel.split('/').pop()}` : ''}
           </span>
           {allMessages.length > 0 && (
             <span className="text-[10px] text-white/30 px-1.5 py-0.5 bg-white/5 rounded">
@@ -208,7 +217,7 @@ const ExpandedState = () => {
         <div className="flex items-center gap-1">
           <ActionButton 
             onClick={() => setShowAISelector(!showAISelector)}
-            title="Switch AI Model"
+            title="Change this chat's AI"
           >
             <Zap className={`w-3.5 h-3.5 ${showAISelector ? 'text-wingman-400' : ''}`} />
           </ActionButton>
@@ -239,7 +248,10 @@ const ExpandedState = () => {
         </div>
       </div>
 
-      {/* Quick AI Selector */}
+      {/* Chat tabs: each keeps its own conversation, mode and AI */}
+      <ChatTabs />
+
+      {/* Quick AI Selector (for this chat) */}
       {showAISelector && (
         <motion.div
           className="mb-3 pb-3 border-b border-white/10"
@@ -396,6 +408,52 @@ const ExpandedState = () => {
         )
       })()}
     </motion.div>
+  )
+}
+
+// Tab bar
+const ChatTabs = () => {
+  const { tabs, activeConversationId } = useAppStore()
+  return (
+    <div className="flex items-center gap-1 mb-3 flex-shrink-0 overflow-x-auto" role="tablist" aria-label="Chats">
+      {tabs.map((tab) => {
+        const active = tab.id === activeConversationId
+        return (
+          <div
+            key={tab.id}
+            role="tab"
+            aria-selected={active}
+            tabIndex={0}
+            onClick={() => !active && switchTab(tab.id)}
+            onKeyDown={(e) => e.key === 'Enter' && switchTab(tab.id)}
+            title={`${tab.title} · ${tab.mode}${tab.provider ? ' · ' + tab.provider : ''}`}
+            className={`group flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-lg text-xs whitespace-nowrap cursor-pointer transition-colors ${
+              active ? 'bg-wingman-500/20 text-wingman-300' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'
+            }`}
+          >
+            <span className="max-w-[120px] truncate">{tab.title}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                closeTab(tab.id)
+              }}
+              className={`p-0.5 rounded hover:bg-white/15 ${active ? 'opacity-70' : 'opacity-0 group-hover:opacity-70'}`}
+              aria-label={`Close ${tab.title}`}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )
+      })}
+      <button
+        onClick={() => newTab()}
+        className="p-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white flex-shrink-0"
+        title="New chat"
+        aria-label="New chat"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
   )
 }
 

@@ -370,7 +370,7 @@ Output only the {to_lang} code:"""
             # Emit to all clients
             await self.sio.emit(client_event, {
                 # Screenshots go to the AI only, never back over the socket
-                "data": {k: v for k, v in event.data.items() if k != "image"},
+                "data": {k: v for k, v in event.data.items() if k not in ("image", "prompt")},
                 "timestamp": event.timestamp.isoformat(),
                 "source": event.source
             })

@@ -84,9 +84,9 @@ class Settings(BaseSettings):
         return [k.strip() for k in self.nvidia_api_keys.replace("\n", ",").split(",") if k.strip()]
 
     class Config:
-        # Bundled app: the .env ships next to the executable, but the app runs us from a
-        # writable data folder (so logs/data work even when the app sits on a read-only DMG)
-        env_file = (str(Path(sys.executable).parent / ".env"), ".env") if getattr(sys, "frozen", False) else ".env"
+        # Bundled app: only the .env shipped next to the executable. The app runs us from a writable
+        # data folder (logs/data work even on a read-only DMG); a stray .env there must not override the keys
+        env_file = str(Path(sys.executable).parent / ".env") if getattr(sys, "frozen", False) else ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
         extra = "ignore"  # Ignore extra keys in .env file

@@ -97,7 +97,9 @@ class AIModule:
         context: str = "",
         mode: str = "interview",
         conversation_history: list = None,
-        image: str = None
+        image: str = None,
+        provider: str = None,
+        model: str = None
     ) -> AsyncGenerator[str, None]:
         """
         Stream answer generation with conversation history
@@ -120,7 +122,9 @@ class AIModule:
             context=context,
             mode=mode,
             conversation_history=conversation_history,
-            image=image
+            image=image,
+            provider=provider,
+            model=model
         ):
             yield chunk
     

@@ -13,15 +13,17 @@ from pathlib import Path
 
 class Message:
     """A single message in a conversation"""
-    def __init__(self, role: str, content: str, timestamp: datetime = None):
+    def __init__(self, role: str, content: str, timestamp: datetime = None, display: str = None):
         self.role = role  # 'user' or 'assistant'
-        self.content = content
+        self.content = content  # what the AI sees
+        self.display = display  # shorter text for the chat (e.g. a captured page), if different
         self.timestamp = timestamp or datetime.now()
     
     def to_dict(self) -> Dict:
         return {
             "role": self.role,
             "content": self.content,
+            "display": self.display,
             "timestamp": self.timestamp.isoformat()
         }
     
@@ -30,7 +32,8 @@ class Message:
         return cls(
             role=data["role"],
             content=data["content"],
-            timestamp=datetime.fromisoformat(data["timestamp"])
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            display=data.get("display")
         )
 
 
@@ -42,24 +45,30 @@ class Conversation:
         mode: str = "interview",
         title: str = None,
         created_at: datetime = None,
-        messages: List[Message] = None
+        messages: List[Message] = None,
+        provider: str = None,
+        model: str = None
     ):
         self.id = id
         self.mode = mode
+        # This chat's AI; None = the default from Settings
+        self.provider = provider
+        self.model = model
         self.title = title
         self.created_at = created_at or datetime.now()
         self.updated_at = self.created_at
         self.messages: List[Message] = messages or []
     
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str, display: str = None):
         """Add a message to the conversation"""
-        msg = Message(role, content)
+        msg = Message(role, content, display=display)
         self.messages.append(msg)
         self.updated_at = datetime.now()
         
         # Auto-generate title from first user message
         if not self.title and role == "user":
-            self.title = content[:50] + ("..." if len(content) > 50 else "")
+            text = display or content
+            self.title = text[:50] + ("..." if len(text) > 50 else "")
     
     def get_context_messages(self, limit: int = 10) -> List[Dict[str, str]]:
         """Get recent messages formatted for AI context"""
@@ -75,6 +84,8 @@ class Conversation:
             "id": self.id,
             "mode": self.mode,
             "title": self.title,
+            "provider": self.provider,
+            "model": self.model,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "messages": [m.to_dict() for m in self.messages]
@@ -88,7 +99,9 @@ class Conversation:
             mode=data.get("mode", "interview"),
             title=data.get("title"),
             created_at=datetime.fromisoformat(data["created_at"]),
-            messages=messages
+            messages=messages,
+            provider=data.get("provider"),
+            model=data.get("model")
         )
         conv.updated_at = datetime.fromisoformat(data.get("updated_at", data["created_at"]))
         return conv
@@ -159,11 +172,11 @@ class ConversationManager:
             self._save_conversations()
             logger.info(f"Cleaned up {len(expired)} expired conversations")
     
-    def create_conversation(self, mode: str = "interview") -> Conversation:
+    def create_conversation(self, mode: str = "interview", provider: str = None, model: str = None) -> Conversation:
         """Create a new conversation"""
         import uuid
         conv_id = str(uuid.uuid4())[:8]
-        conv = Conversation(id=conv_id, mode=mode)
+        conv = Conversation(id=conv_id, mode=mode, provider=provider, model=model)
         self.conversations[conv_id] = conv
         self.active_conversation_id = conv_id
         self._save_conversations()
@@ -188,7 +201,7 @@ class ConversationManager:
             return True
         return False
     
-    def add_message(self, role: str, content: str, conv_id: str = None) -> Optional[Conversation]:
+    def add_message(self, role: str, content: str, conv_id: str = None, display: str = None) -> Optional[Conversation]:
         """Add a message to a conversation (creates new if none exists)"""
         conv_id = conv_id or self.active_conversation_id
         
@@ -198,7 +211,7 @@ class ConversationManager:
         else:
             conv = self.conversations[conv_id]
         
-        conv.add_message(role, content)
+        conv.add_message(role, content, display)
         self._save_conversations()
         return conv
     
@@ -223,6 +236,8 @@ class ConversationManager:
                 "id": c.id,
                 "title": c.title or "New conversation",
                 "mode": c.mode,
+                "provider": c.provider,
+                "model": c.model,
                 "created_at": c.created_at.isoformat(),
                 "updated_at": c.updated_at.isoformat(),
                 "message_count": len(c.messages),
@@ -248,6 +263,14 @@ class ConversationManager:
         self.active_conversation_id = None
         self._save_conversations()
         logger.info("Cleared all conversations")
+    
+    def set_ai(self, conv_id: str, provider: str, model: str = None) -> Optional[Conversation]:
+        """Choose the AI for one conversation"""
+        conv = self.conversations.get(conv_id)
+        if conv:
+            conv.provider, conv.model = provider, model
+            self._save_conversations()
+        return conv
     
     def change_mode(self, mode: str, conv_id: str = None) -> Optional[Conversation]:
         """Change the mode of the active conversation"""
