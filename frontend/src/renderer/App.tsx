@@ -11,7 +11,7 @@ import { HistoryView } from "./components/History"
 import { useAppStore, OperatingMode } from "./store/appStore"
 import { useWebSocket } from "./hooks/useWebSocket"
 import socketService from "./services/socket"
-import { useSettingsStore, requestCapture, IslandPosition } from "./store/settingsStore"
+import { useSettingsStore, requestCapture, requestScreenshot, IslandPosition } from "./store/settingsStore"
 
 const ISLAND_POSITION_CLASSES: Record<IslandPosition, string> = {
   "top": "top-4 left-1/2 -translate-x-1/2",
@@ -123,11 +123,13 @@ function App() {
       })
 
       const unsubCapture = window.wingman.onCaptureScreen(requestCapture)
+      const unsubScreenshot = window.wingman.onTakeScreenshot(requestScreenshot)
       const unsubStart = window.wingman.onStartListening(() => socketService.startAudio())
       const unsubStop = window.wingman.onStopListening(() => socketService.stopAudio())
 
       return () => {
         unsubCapture()
+        unsubScreenshot()
         unsubStart()
         unsubStop()
         unsubMode()

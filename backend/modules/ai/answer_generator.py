@@ -29,6 +29,12 @@ PROVIDER_MODELS = {
     }
 }
 
+# Models that can read screenshots (tested: Groq answers in <1s, NVIDIA is the backup)
+PROVIDER_VISION_MODELS = {
+    "groq": "qwen/qwen3.8-27b",
+    "nvidia": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+}
+
 PROVIDER_URLS = {
     "groq": "https://api.groq.com/openai/v1/chat/completions",
     "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -179,8 +185,9 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         question: str,
         context: str,
         mode: str,
-        conversation_history: list[Dict[str, str]] = None
-    ) -> list[Dict[str, str]]:
+        conversation_history: list[Dict[str, str]] = None,
+        image: str = None
+    ) -> list[Dict[str, Any]]:
         """Build the prompt messages with optional conversation history"""
         messages = [
             {"role": "system", "content": self._get_system_prompt(mode)}
@@ -200,9 +207,16 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                     "content": msg["content"]
                 })
         
+        content: Any = question
+        if image:
+            # OpenAI-style vision message: text + base64 JPEG screenshot
+            content = [
+                {"type": "text", "text": question},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image}"}},
+            ]
         messages.append({
             "role": "user",
-            "content": question
+            "content": content
         })
         
         return messages
@@ -228,10 +242,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         question: str,
         context: str = "",
         mode: str = "interview",
-        conversation_history: list[Dict[str, str]] = None
+        conversation_history: list[Dict[str, str]] = None,
+        image: str = None
     ) -> AsyncGenerator[str, None]:
-        """Stream answer generation from the selected provider"""
-        messages = self._build_messages(question, context, mode, conversation_history)
+        """Stream answer generation from the selected provider (image = base64 JPEG screenshot)"""
+        messages = self._build_messages(question, context, mode, conversation_history, image)
         
         self.last_used_provider = None
         self.last_used_model = None
@@ -244,7 +259,8 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
                 continue
             yielded = False
             try:
-                async for chunk in self._stream_provider(provider, messages):
+                model = PROVIDER_VISION_MODELS[provider] if image else None
+                async for chunk in self._stream_provider(provider, messages, model):
                     yielded = True
                     yield chunk
                 return
@@ -257,10 +273,11 @@ Suggest concrete improvements they can actually use. Be encouraging but real."""
         
         yield "Error: No AI provider available. Please configure a Groq or NVIDIA API key."
     
-    async def _stream_provider(self, provider: str, messages: list[Dict[str, str]]) -> AsyncGenerator[str, None]:
+    async def _stream_provider(self, provider: str, messages: list[Dict[str, Any]], model: str = None) -> AsyncGenerator[str, None]:
         """Stream from a provider. For NVIDIA, rotate through keys until one responds."""
-        model = self.default_model if provider == self.provider else PROVIDER_MODELS[provider]["default"]
-        if model not in PROVIDER_MODELS[provider]["models"]:
+        if model is None:
+            model = self.default_model if provider == self.provider else PROVIDER_MODELS[provider]["default"]
+        if model not in PROVIDER_MODELS[provider]["models"] and model != PROVIDER_VISION_MODELS[provider]:
             # Stale/retired model name (e.g. from old saved settings)
             model = PROVIDER_MODELS[provider]["default"]
         keys = [settings.groq_api_key] if provider == "groq" else settings.nvidia_keys

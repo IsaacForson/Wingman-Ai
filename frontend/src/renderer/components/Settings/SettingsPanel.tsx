@@ -20,8 +20,10 @@ import {
   AlertCircle,
   ExternalLink,
   Trash2,
+  User,
+  Upload,
 } from "lucide-react";
-import { useSettingsStore, HotkeyAction } from "../../store/settingsStore";
+import { useSettingsStore, HotkeyAction, ListenSource } from "../../store/settingsStore";
 import { AIProvider, PROVIDER_MODELS } from "../../store/appStore";
 import socketService from "../../services/socket";
 import toast from "react-hot-toast";
@@ -31,6 +33,7 @@ type SettingsTab =
   | "audio"
   | "screen"
   | "ai"
+  | "profile"
   | "apikeys"
   | "appearance"
   | "hotkeys"
@@ -57,6 +60,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
     { id: "audio", label: "Audio", icon: <Mic className="w-4 h-4" /> },
     { id: "screen", label: "Screen", icon: <Monitor className="w-4 h-4" /> },
     { id: "ai", label: "AI Models", icon: <Brain className="w-4 h-4" /> },
+    { id: "profile", label: "Profile", icon: <User className="w-4 h-4" /> },
     { id: "apikeys", label: "API Keys", icon: <Key className="w-4 h-4" /> },
     { id: "appearance", label: "Appearance", icon: <Palette className="w-4 h-4" /> },
     { id: "hotkeys", label: "Hotkeys", icon: <Keyboard className="w-4 h-4" /> },
@@ -133,6 +137,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     {activeTab === "audio" && <AudioSettings />}
                     {activeTab === "screen" && <ScreenSettings />}
                     {activeTab === "ai" && <AISettings />}
+                    {activeTab === "profile" && <ProfileSettings />}
                     {activeTab === "apikeys" && <APIKeysSettings />}
                     {activeTab === "appearance" && <AppearanceSettings />}
                     {activeTab === "hotkeys" && <HotkeysSettings />}
@@ -212,6 +217,7 @@ const AudioSettings: React.FC = () => {
     whisperModel, setWhisperModel,
     useLocalWhisper, setUseLocalWhisper,
     silenceThreshold, setSilenceThreshold,
+    listenSource, setListenSource,
   } = useSettingsStore();
 
   const [devices, setDevices] = useState<{ id: number; name: string }[]>([]);
@@ -224,6 +230,27 @@ const AudioSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <SettingsSection title="Listen To">
+        <SelectSetting
+          label="Audio source"
+          description="Computer audio hears the interviewer on Zoom/Meet/Teams. With Both, only the interviewer's questions get answered."
+          value={listenSource}
+          options={[
+            { value: "mic", label: "Microphone (you)" },
+            { value: "system", label: "Computer audio (interviewer)" },
+            { value: "both", label: "Both" },
+          ]}
+          onChange={(v) => setListenSource(v as ListenSource)}
+        />
+        {listenSource !== "mic" && (
+          <InfoBox>
+            The first time, macOS asks to let Wingman AI record the screen and system audio. Allow it in System
+            Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, then restart Wingman. Applies
+            the next time you start listening.
+          </InfoBox>
+        )}
+      </SettingsSection>
+
       <SettingsSection title="Input Device">
         <SelectSetting
           label="Microphone"
@@ -302,8 +329,9 @@ const ScreenSettings: React.FC = () => {
           onChange={setEnableScreenCapture}
         />
         <InfoBox>
-          Capture reads the active Chrome tab through the Wingman extension, so Chrome must be open with the
-          extension enabled. Answers show up here in the island, not in the browser.
+          Capture reads the active Chrome tab through the Wingman extension (just your highlighted text, if you
+          selected some). If the extension isn't connected it takes a screenshot instead. Screenshot (⌘+Shift+X)
+          sends the screen under your mouse to a vision model, so it works on images, PDFs and any app.
         </InfoBox>
       </SettingsSection>
     </div>
@@ -385,6 +413,116 @@ const AISettings: React.FC = () => {
         />
       </SettingsSection>
     </div>
+  );
+};
+
+// Profile Settings
+const ProfileSettings: React.FC = () => {
+  const { resume, setResume, jobDescription, setJobDescription } = useSettingsStore();
+
+  return (
+    <div className="space-y-6">
+      <InfoBox>
+        In Interview and Practice mode, answers use your real experience from your résumé and match them to the
+        job. Stored on this Mac only.
+      </InfoBox>
+      <ProfileField
+        title="Your Résumé"
+        placeholder="Paste your résumé, or import a PDF / text file…"
+        value={resume}
+        onSave={setResume}
+      />
+      <ProfileField
+        title="Job Description"
+        placeholder="Paste the job posting you're interviewing for…"
+        value={jobDescription}
+        onSave={setJobDescription}
+      />
+    </div>
+  );
+};
+
+const ProfileField: React.FC<{
+  title: string;
+  placeholder: string;
+  value: string;
+  onSave: (text: string) => void;
+}> = ({ title, placeholder, value, onSave }) => {
+  const [text, setText] = useState(value);
+  const [importing, setImporting] = useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const save = (next: string) => {
+    if (next !== value) {
+      onSave(next);
+      toast.success(`${title} saved`);
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("http://localhost:8765/api/profile/extract", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Import failed");
+      setText(data.text);
+      save(data.text);
+    } catch (e) {
+      toast.error(`Could not import ${file.name}: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <SettingsSection title={title}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => save(text)}
+        placeholder={placeholder}
+        aria-label={title}
+        rows={7}
+        className="w-full px-3 py-2 rounded-lg bg-white/10 text-sm text-white border border-white/10 focus:outline-none focus:border-wingman-500 resize-y"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-white/40">{text.length.toLocaleString()} characters</span>
+        <div className="flex gap-2">
+          {text && (
+            <button
+              onClick={() => {
+                setText("");
+                save("");
+              }}
+              className="px-3 py-1.5 rounded-lg bg-white/10 text-white/60 hover:text-white text-xs"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="px-3 py-1.5 rounded-lg bg-wingman-500/20 text-wingman-300 hover:bg-wingman-500/30 text-xs flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Upload className="w-3 h-3" />
+            {importing ? "Importing…" : "Import PDF / text"}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.txt,.md"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImport(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
+    </SettingsSection>
   );
 };
 
@@ -509,7 +647,8 @@ const HotkeysSettings: React.FC = () => {
     { key: "toggleVisibility", action: "Toggle visibility" },
     { key: "commandPalette", action: "Command palette" },
     { key: "pauseResume", action: "Pause/Resume" },
-    { key: "captureScreen", action: "Capture screen" },
+    { key: "captureScreen", action: "Capture Chrome tab" },
+    { key: "screenshot", action: "Screenshot" },
     { key: "emergencyHide", action: "Emergency hide" },
     { key: "startListening", action: "Start listening" },
     { key: "stopListening", action: "Stop listening" },

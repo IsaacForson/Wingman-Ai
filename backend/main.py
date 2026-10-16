@@ -9,7 +9,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -298,6 +298,25 @@ Answer:"""
     except Exception as e:
         logger.error(f"❌ Analysis error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/profile/extract")
+async def extract_profile_text(file: UploadFile):
+    """Turn an uploaded résumé / job description (PDF or text) into plain text"""
+    data = await file.read()
+    if len(data) > 10_000_000:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    if (file.filename or "").lower().endswith(".pdf"):
+        import io
+        import pdfplumber
+        try:
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not read PDF: {e}")
+    else:
+        text = data.decode("utf-8", errors="replace")
+    return {"text": text.strip()}
 
 
 # ============================================

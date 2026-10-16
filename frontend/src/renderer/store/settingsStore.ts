@@ -11,7 +11,8 @@ import { useAppStore, AIProvider, PROVIDER_MODELS } from './appStore'
 
 export type WhisperModel = 'tiny' | 'base' | 'small' | 'medium' | 'large'
 export type IslandPosition = 'top' | 'top-left' | 'top-right' | 'bottom' | 'bottom-left' | 'bottom-right'
-export type HotkeyAction = 'toggleVisibility' | 'commandPalette' | 'pauseResume' | 'captureScreen' | 'emergencyHide' | 'startListening' | 'stopListening'
+export type HotkeyAction = 'toggleVisibility' | 'commandPalette' | 'pauseResume' | 'captureScreen' | 'screenshot' | 'emergencyHide' | 'startListening' | 'stopListening'
+export type ListenSource = 'mic' | 'system' | 'both'
 
 interface SettingsState {
   // General Settings
@@ -48,6 +49,16 @@ interface SettingsState {
 
   silenceThreshold: number
   setSilenceThreshold: (value: number) => void
+  
+  listenSource: ListenSource
+  setListenSource: (source: ListenSource) => void
+  
+  // Profile: used as context for interview / practice answers
+  resume: string
+  setResume: (text: string) => void
+  
+  jobDescription: string
+  setJobDescription: (text: string) => void
 
   // Screen Settings
   enableScreenCapture: boolean
@@ -125,6 +136,11 @@ const defaultSettings = {
   whisperModel: 'base' as WhisperModel,
   useLocalWhisper: false,
   silenceThreshold: 2000,
+  listenSource: 'mic' as ListenSource,
+  
+  // Profile
+  resume: '',
+  jobDescription: '',
 
   // Screen
   enableScreenCapture: true,
@@ -154,6 +170,7 @@ const defaultSettings = {
     commandPalette: 'CommandOrControl+Space',
     pauseResume: 'CommandOrControl+Shift+P',
     captureScreen: 'CommandOrControl+Shift+S',
+    screenshot: 'CommandOrControl+Shift+X',
     emergencyHide: 'CommandOrControl+Shift+Escape',
     startListening: 'CommandOrControl+Shift+L',
     stopListening: 'CommandOrControl+Shift+K',
@@ -236,6 +253,22 @@ export const useSettingsStore = create<SettingsState>()(
         syncField({ silenceThreshold: value })
       },
 
+      setListenSource: (source) => {
+        set({ listenSource: source })
+        syncField({ listenSource: source })
+      },
+      
+      // Profile setters
+      setResume: (text) => {
+        set({ resume: text })
+        syncField({ resume: text })
+      },
+      
+      setJobDescription: (text) => {
+        set({ jobDescription: text })
+        syncField({ jobDescription: text })
+      },
+      
       // Screen setters
       setEnableScreenCapture: (value) => set({ enableScreenCapture: value }),
 
@@ -323,6 +356,9 @@ export const useSettingsStore = create<SettingsState>()(
           inputDevice: state.inputDevice,
           vadSensitivity: state.vadSensitivity,
           silenceThreshold: state.silenceThreshold,
+          listenSource: state.listenSource,
+          resume: state.resume,
+          jobDescription: state.jobDescription,
           whisperModel: state.whisperModel,
           useLocalWhisper: state.useLocalWhisper,
           saveSessionHistory: state.saveSessionHistory,
@@ -378,6 +414,12 @@ export const useSettingsStore = create<SettingsState>()(
         }
         return persisted
       },
+      // Saved hotkeys from older versions lack newer actions; keep the defaults for those
+      merge: (persisted: any, current) => ({
+        ...current,
+        ...persisted,
+        hotkeys: { ...current.hotkeys, ...persisted?.hotkeys },
+      }),
       partialize: (state) => ({
         // Only persist these fields
         launchAtStartup: state.launchAtStartup,
@@ -391,6 +433,9 @@ export const useSettingsStore = create<SettingsState>()(
         whisperModel: state.whisperModel,
         useLocalWhisper: state.useLocalWhisper,
         silenceThreshold: state.silenceThreshold,
+        listenSource: state.listenSource,
+        resume: state.resume,
+        jobDescription: state.jobDescription,
         enableScreenCapture: state.enableScreenCapture,
         aiProvider: state.aiProvider,
         aiModel: state.aiModel,
@@ -418,6 +463,30 @@ export function requestCapture() {
     return
   }
   socketService.requestCapture()
+}
+
+// Screenshot of the screen under the mouse -> vision model. Works outside Chrome and on images/PDFs.
+export async function requestScreenshot() {
+  if (!useSettingsStore.getState().enableScreenCapture) {
+    toast.error('Screen capture is off (Settings → Screen)')
+    return
+  }
+  const result = await window.wingman?.captureScreenshot?.()
+  if (!result) {
+    toast.error('Screenshots only work in the desktop app')
+    return
+  }
+  if (result.error || !result.image) {
+    toast.error(result.error || 'Screenshot failed', { duration: 6000 })
+    return
+  }
+  const { activeConversationId, mode, setProcessing } = useAppStore.getState()
+  setProcessing(true)
+  socketService.emit('analyze_screenshot', {
+    image: result.image,
+    conversation_id: activeConversationId || undefined,
+    mode
+  })
 }
 
 // Sound + notification when an answer finishes (both off by default)

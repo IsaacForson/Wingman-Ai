@@ -9,7 +9,7 @@ import { useAppStore } from '../store/appStore'
 import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
 import socketService from '../services/socket'
-import { useSettingsStore, notifyAnswerReady } from '../store/settingsStore'
+import { useSettingsStore, notifyAnswerReady, requestScreenshot } from '../store/settingsStore'
 
 let hasAutoStarted = false
 
@@ -293,8 +293,14 @@ export function useWebSocket() {
       }
     })
 
-    socket.on('capture_error', (data: { error?: string }) => {
-      toast.error(data.error || 'Screen capture failed')
+    // Chrome extension not reachable: take a screenshot instead so Capture always works
+    socket.on('capture_error', () => {
+      toast('Chrome extension not connected, using a screenshot', { icon: '📷' })
+      requestScreenshot()
+    })
+
+    socket.on('system_error', (data: { data?: { error?: string } }) => {
+      toast.error(data.data?.error || 'Something went wrong', { duration: 8000 })
     })
 
   }, [

@@ -19,7 +19,8 @@ sio = socketio.AsyncServer(
     async_mode='asgi',
     cors_allowed_origins='*',  # Allow all origins for Electron file:// protocol
     logger=False,
-    engineio_logger=False
+    engineio_logger=False,
+    max_http_buffer_size=10_000_000  # screenshots are a few hundred KB
 )
 
 
@@ -49,6 +50,11 @@ async def apply_settings(data: Dict[str, Any]):
     if not engine:
         return
     
+    if "resume" in data:
+        engine.resume = str(data["resume"] or "")[:20000]
+    if "jobDescription" in data:
+        engine.job_description = str(data["jobDescription"] or "")[:20000]
+    
     if engine._ai_module:
         generator = engine._ai_module.answer_generator
         if data.get("aiProvider"):
@@ -64,6 +70,8 @@ async def apply_settings(data: Dict[str, Any]):
             audio.capture.device = None if device in (None, "", "default") else int(device)
         if "vadSensitivity" in data and audio.vad:
             audio.vad.set_aggressiveness(int(data["vadSensitivity"]))
+        if data.get("listenSource") in ("mic", "system", "both"):
+            audio.listen_source = data["listenSource"]  # takes effect the next time listening starts
         if "silenceThreshold" in data:
             audio.silence_ms = int(data["silenceThreshold"])
         model = data.get("whisperModel", settings.whisper_model)
@@ -115,7 +123,9 @@ class WebSocketManager:
             from main import engine
             if engine:
                 await engine.start_audio()
-                await self.sio.emit("audio_status", {"status": "started"}, room=sid)
+                # Only "started" if a source actually started (computer audio may lack permission)
+                running = bool(engine._audio_module and engine._audio_module._is_running)
+                await self.sio.emit("audio_status", {"status": "started" if running else "stopped"}, room=sid)
         
         @self.sio.event
         async def stop_audio(sid, data=None):
@@ -222,6 +232,13 @@ class WebSocketManager:
             """List microphones the backend can record from (returned as an ack)"""
             from modules.audio.capture import AudioCapture
             return AudioCapture.list_devices()
+        
+        @self.sio.event
+        async def analyze_screenshot(sid, data):
+            """Answer what's on a screenshot taken by the desktop app"""
+            from main import engine
+            if engine and data.get("image"):
+                await engine.process_image(data["image"], data.get("conversation_id"), data.get("mode"))
         
         @self.sio.event
         async def request_capture(sid, data=None):
@@ -352,7 +369,8 @@ Output only the {to_lang} code:"""
             
             # Emit to all clients
             await self.sio.emit(client_event, {
-                "data": event.data,
+                # Screenshots go to the AI only, never back over the socket
+                "data": {k: v for k, v in event.data.items() if k != "image"},
                 "timestamp": event.timestamp.isoformat(),
                 "source": event.source
             })
@@ -381,7 +399,10 @@ ws_manager: Optional[WebSocketManager] = None
 def create_socket_app() -> socketio.ASGIApp:
     """Create and configure the Socket.IO ASGI application"""
     global ws_manager
-    ws_manager = WebSocketManager(sio)
+    # main.py runs twice (as the script, then imported by uvicorn); a second manager
+    # would forward every event to the app twice (doubled answer text)
+    if ws_manager is None:
+        ws_manager = WebSocketManager(sio)
     # socketio_path is empty since we mount the app at /socket.io
     return socketio.ASGIApp(sio, socketio_path="")
 

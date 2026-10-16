@@ -130,8 +130,9 @@ async function stealthCapture() {
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
-          // Get visible text content
-          return document.body.innerText;
+          // Highlighted text wins: faster, cheaper and less noise than the whole page
+          const selected = window.getSelection()?.toString().trim();
+          return selected || document.body.innerText;
         }
       });
       content = results?.[0]?.result;
@@ -143,7 +144,7 @@ async function stealthCapture() {
       return;
     }
     
-    if (!content || content.trim().length < 10) {
+    if (!content || content.trim().length < 3) {
       console.error('❌ No content captured or too short');
       setBadge('error', '✗');
       setTimeout(() => setBadge('ready', '✓'), 3000);

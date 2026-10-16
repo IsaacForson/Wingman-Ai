@@ -3,7 +3,7 @@
  * Handles window management, system tray, global hotkeys, and backend auto-start
  */
 
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage, session } from 'electron'
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, nativeImage, NativeImage, session, desktopCapturer, systemPreferences } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
@@ -234,6 +234,7 @@ const hotkeyActions: Record<string, () => void> = {
   },
   pauseResume: () => mainWindow?.webContents.send('toggle-pause'),
   captureScreen: () => mainWindow?.webContents.send('capture-screen'),
+  screenshot: () => mainWindow?.webContents.send('take-screenshot'),
   // Emergency hide (kill switch)
   emergencyHide: () => {
     mainWindow?.hide()
@@ -248,6 +249,7 @@ const hotkeys: Record<string, string> = {
   commandPalette: 'CommandOrControl+Space',
   pauseResume: 'CommandOrControl+Shift+P',
   captureScreen: 'CommandOrControl+Shift+S',
+  screenshot: 'CommandOrControl+Shift+X',
   emergencyHide: 'CommandOrControl+Shift+Escape',
   startListening: 'CommandOrControl+Shift+L',
   stopListening: 'CommandOrControl+Shift+K',
@@ -382,6 +384,30 @@ function setupIPC(): void {
     console.log(`Hide from screen capture: ${hide}`)
   })
 
+  // Screenshot of the screen under the mouse, as base64 JPEG (Wingman itself is hidden by content protection)
+  ipcMain.handle('capture-screenshot', async () => {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    const fullWidth = display.size.width * display.scaleFactor
+    // ~1920px wide is plenty for the vision model and keeps the upload small
+    const scale = Math.min(1, 1920 / fullWidth)
+    const thumbnailSize = {
+      width: Math.round(fullWidth * scale),
+      height: Math.round(display.size.height * display.scaleFactor * scale)
+    }
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
+      // Without permission macOS hands back only the wallpaper, so check after asking
+      if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
+        return { error: 'Allow Wingman AI in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Wingman' }
+      }
+      const source = sources.find((s) => s.display_id === String(display.id)) || sources[0]
+      if (!source || source.thumbnail.isEmpty()) return { error: 'Could not capture the screen' }
+      return { image: source.thumbnail.toJPEG(80).toString('base64') }
+    } catch (err) {
+      return { error: `Screenshot failed: ${err}` }
+    }
+  })
+
   // Hotkey customization
   ipcMain.handle('set-hotkey', (_, action: string, keys: string) => setHotkey(action, keys))
 
@@ -489,6 +515,10 @@ async function startBackend(): Promise<boolean> {
       backendProcess.on('exit', (code) => {
         console.log(`Backend exited with code ${code}`)
         backendProcess = null
+        // Crashed or killed while the app is still open: bring it back
+        if (!isQuitting) {
+          setTimeout(() => startBackend(), 2000)
+        }
       })
 
       // Wait for backend to be ready

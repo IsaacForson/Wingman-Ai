@@ -63,6 +63,8 @@ class WingmanEngine:
         self._ai_module = None
         self._context_module = None
         self._knowledge_module = None
+        self.resume = ""
+        self.job_description = ""
         
         # Processing flags
         self._is_audio_enabled = settings.enable_audio
@@ -191,6 +193,10 @@ class WingmanEngine:
         
         logger.info(f"Received transcript: {transcript[:100]}..." if len(transcript) > 100 else f"Received transcript: {transcript}")
         
+        # Listening to both sides: answer the interviewer, not your own replies
+        if event.data.get("speaker") == "you" and self._audio_module and self._audio_module.listen_source == "both":
+            return
+        
         # Skip empty or very short transcripts
         if len(transcript.strip()) < 5:
             logger.debug("Transcript too short, skipping")
@@ -230,7 +236,7 @@ class WingmanEngine:
         try:
             # Generate answer with conversation context
             if self._ai_module:
-                await self._generate_answer(question_text, source, conversation_id, mode)
+                await self._generate_answer(question_text, source, conversation_id, mode, event.data.get("image"))
         finally:
             self._is_processing = False
     
@@ -253,7 +259,7 @@ class WingmanEngine:
         # Could auto-switch modes based on active app
         logger.debug(f"Active app changed: {app_name}")
     
-    async def _generate_answer(self, question: str, source: str, conversation_id: str = None, mode: str = None):
+    async def _generate_answer(self, question: str, source: str, conversation_id: str = None, mode: str = None, image: str = None):
         """Generate an answer for a detected question with conversation history"""
         from modules.conversation import get_conversation_manager
         
@@ -285,7 +291,7 @@ class WingmanEngine:
                     conversation_id = conv.id
             
             # Get RAG context
-            context = await self._get_context(question)
+            context = await self._get_context(question, mode or self.mode.value)
             
             # Stream answer generation with conversation history
             answer_chunks = []
@@ -293,7 +299,8 @@ class WingmanEngine:
                 question=question,
                 context=context,
                 mode=mode or self.mode.value,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                image=image
             ):
                 answer_chunks.append(chunk)
                 await event_bus.emit(EventType.ANSWER_CHUNK, {
@@ -331,9 +338,16 @@ class WingmanEngine:
                 "error": str(e)
             }, "engine")
     
-    async def _get_context(self, question: str) -> str:
+    async def _get_context(self, question: str, mode: str = "interview") -> str:
         """Get relevant context for a question"""
         context_parts = []
+        
+        # Your résumé and the job you're interviewing for, so answers use your real experience
+        if mode in ("interview", "practice"):
+            if self.resume:
+                context_parts.append(f"The user's résumé (answer as this person, using their real experience):\n{self.resume}")
+            if self.job_description:
+                context_parts.append(f"The job they are interviewing for:\n{self.job_description}")
         
         # Add knowledge base context
         if self._knowledge_module:
@@ -370,9 +384,9 @@ class WingmanEngine:
     async def start_audio(self):
         """Start audio capture"""
         if self._audio_module:
-            await self._audio_module.start()
-            self.state = EngineState.LISTENING
-            await event_bus.emit(EventType.AUDIO_STARTED, {}, "engine")
+            await self._audio_module.start()  # emits AUDIO_STARTED itself
+            if self._audio_module._is_running:
+                self.state = EngineState.LISTENING
     
     async def stop_audio(self):
         """Stop audio capture"""
@@ -387,6 +401,16 @@ class WingmanEngine:
         if self._screen_module:
             return await self._screen_module.capture_and_analyze()
         return None
+    
+    async def process_image(self, image: str, conversation_id: str = None, mode: str = None):
+        """Answer whatever is on a screenshot (base64 JPEG)"""
+        await event_bus.emit(EventType.QUESTION_DETECTED, {
+            "text": "📷 Screenshot: answer the question or solve the problem shown on my screen.",
+            "source": "screen",
+            "image": image,  # stripped before events go to the app
+            "conversation_id": conversation_id,
+            "mode": mode or self.mode.value
+        }, "engine")
     
     async def process_manual_question(self, question: str, conversation_id: str = None, mode: str = None):
         """Process a manually submitted question with optional conversation context"""

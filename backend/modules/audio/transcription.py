@@ -132,7 +132,9 @@ class Transcriber:
             client = Groq(api_key=settings.groq_api_key)
             
             # Use Groq's Whisper model
-            transcription = client.audio.transcriptions.create(
+            # Sync client: run in a thread so the backend keeps streaming answers meanwhile
+            transcription = await asyncio.to_thread(
+                client.audio.transcriptions.create,
                 model="whisper-large-v3",
                 file=wav_buffer,
                 language="en"

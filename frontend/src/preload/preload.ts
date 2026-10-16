@@ -21,6 +21,7 @@ export interface WingmanAPI {
   setWindowOpacity: (opacity: number) => Promise<void>
   setHideFromScreenCapture: (hide: boolean) => Promise<void>
   setHotkey: (action: string, keys: string) => Promise<boolean>
+  captureScreenshot: () => Promise<{ image?: string; error?: string }>
   
   // App control
   quitApp: () => Promise<void>
@@ -37,6 +38,7 @@ export interface WingmanAPI {
   onOpenCommandPalette: (callback: () => void) => () => void
   onEmergencyHide: (callback: () => void) => () => void
   onStartListening: (callback: () => void) => () => void
+  onTakeScreenshot: (callback: () => void) => () => void
   onStopListening: (callback: () => void) => () => void
 
   // App info
@@ -60,6 +62,7 @@ contextBridge.exposeInMainWorld('wingman', {
   setWindowOpacity: (opacity: number) => ipcRenderer.invoke('set-window-opacity', opacity),
   setHideFromScreenCapture: (hide: boolean) => ipcRenderer.invoke('set-hide-from-screen-capture', hide),
   setHotkey: (action: string, keys: string) => ipcRenderer.invoke('set-hotkey', action, keys),
+  captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
   
   // App control
   quitApp: () => ipcRenderer.invoke('quit-app'),
@@ -103,6 +106,12 @@ contextBridge.exposeInMainWorld('wingman', {
     const handler = () => callback()
     ipcRenderer.on('emergency-hide', handler)
     return () => ipcRenderer.removeListener('emergency-hide', handler)
+  },
+
+  onTakeScreenshot: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('take-screenshot', handler)
+    return () => ipcRenderer.removeListener('take-screenshot', handler)
   },
 
   onStartListening: (callback: () => void) => {

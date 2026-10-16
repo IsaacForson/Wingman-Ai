@@ -5,8 +5,8 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/appStore";
-import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings, ScanText } from "lucide-react";
-import { requestCapture } from "../../store/settingsStore";
+import { Loader2, ChevronDown, Sparkles, Mic, MicOff, Settings, ScanText, Camera } from "lucide-react";
+import { requestCapture, requestScreenshot } from "../../store/settingsStore";
 import socketService from "../../services/socket";
 import { ModeSelector } from "../ModeSelector";
 
@@ -128,6 +128,19 @@ const NormalState = () => {
           aria-label="Capture screen"
         >
           <ScanText className="w-3.5 h-3.5 text-white/50 hover:text-white/80" />
+        </button>
+
+        {/* Screenshot -> vision model */}
+        <button
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/15 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            requestScreenshot();
+          }}
+          title="Screenshot (⌘+Shift+X)"
+          aria-label="Screenshot"
+        >
+          <Camera className="w-3.5 h-3.5 text-white/50 hover:text-white/80" />
         </button>
 
         {/* Settings button */}

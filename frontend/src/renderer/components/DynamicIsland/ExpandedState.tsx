@@ -26,7 +26,8 @@ import {
   ChevronDown,
   Loader2,
   ScanText,
-  Send
+  Send,
+  Camera
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -34,7 +35,7 @@ import toast from 'react-hot-toast'
 import { AIProviderSelector } from '../AIProviderSelector'
 import { ModeSelector } from '../ModeSelector'
 import socketService from '../../services/socket'
-import { useSettingsStore, requestCapture } from '../../store/settingsStore'
+import { useSettingsStore, requestCapture, requestScreenshot } from '../../store/settingsStore'
 
 // Available programming languages for conversion
 const PROGRAMMING_LANGUAGES = [
@@ -364,6 +365,15 @@ const ExpandedState = () => {
               >
                 <ScanText className="w-3.5 h-3.5 text-wingman-400" />
                 <span className="text-xs text-wingman-400">Capture</span>
+              </ActionButton>
+              {/* Screenshot -> vision model: images, PDFs, apps outside Chrome */}
+              <ActionButton
+                onClick={requestScreenshot}
+                className="px-2 gap-1 bg-wingman-500/20 hover:bg-wingman-500/30"
+                title="Screenshot (⌘+Shift+X)"
+              >
+                <Camera className="w-3.5 h-3.5 text-wingman-400" />
+                <span className="text-xs text-wingman-400">Screenshot</span>
               </ActionButton>
             </div>
             

@@ -60,6 +60,9 @@ msgpack==1.0.7
 # macOS specific (for active window detection)
 pyobjc-framework-Cocoa==10.1;sys_platform=="darwin"
 pyobjc-framework-Quartz==10.1;sys_platform=="darwin"
+# System audio (hear the interviewer) via ScreenCaptureKit, macOS 13+
+pyobjc-framework-ScreenCaptureKit==10.1;sys_platform=="darwin"
+pyobjc-framework-CoreMedia==10.1;sys_platform=="darwin"
 
 # Testing
 pytest==7.4.4
